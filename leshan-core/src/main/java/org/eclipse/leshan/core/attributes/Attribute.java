@@ -35,6 +35,8 @@ public class Attribute {
     public static final String OBJECT_VERSION = "ver";
     public static final String MINIMUM_PERIOD = "pmin";
     public static final String MAXIMUM_PERIOD = "pmax";
+    public static final String EVALUATE_MAXIMUM_PERIOD = "epmax";
+    public static final String EVALUATE_MINIMUM_PERIOD = "epmin";
     public static final String GREATER_THAN = "gt";
     public static final String LESSER_THAN = "lt";
     public static final String STEP = "st";
@@ -73,6 +75,14 @@ public class Attribute {
                         AccessMode.RW, Long.class));
         modelMap.put(MAXIMUM_PERIOD,
                 new Attribute.AttributeModel(MAXIMUM_PERIOD, Attachment.RESOURCE,
+                        EnumSet.of(AssignationLevel.OBJECT, AssignationLevel.INSTANCE, AssignationLevel.RESOURCE),
+                        AccessMode.RW, Long.class));
+        modelMap.put(EVALUATE_MINIMUM_PERIOD,
+                new Attribute.AttributeModel(EVALUATE_MINIMUM_PERIOD, Attachment.RESOURCE,
+                        EnumSet.of(AssignationLevel.OBJECT, AssignationLevel.INSTANCE, AssignationLevel.RESOURCE),
+                        AccessMode.RW, Long.class));
+        modelMap.put(EVALUATE_MAXIMUM_PERIOD,
+                new Attribute.AttributeModel(EVALUATE_MAXIMUM_PERIOD, Attachment.RESOURCE,
                         EnumSet.of(AssignationLevel.OBJECT, AssignationLevel.INSTANCE, AssignationLevel.RESOURCE),
                         AccessMode.RW, Long.class));
         modelMap.put(GREATER_THAN, new AttributeModel(GREATER_THAN, Attachment.RESOURCE,
