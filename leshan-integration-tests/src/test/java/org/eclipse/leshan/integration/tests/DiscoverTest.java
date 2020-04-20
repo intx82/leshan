@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -17,6 +17,7 @@
 package org.eclipse.leshan.integration.tests;
 
 import static org.eclipse.leshan.ResponseCode.*;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.*;
@@ -61,7 +62,7 @@ public class DiscoverTest {
         assertThat(response.getCoapResponse(), is(instanceOf(Response.class)));
 
         Link[] payload = response.getObjectLinks();
-        assertEquals("</3>, </3/0>, </3/0/0>, </3/0/1>, </3/0/2>, </3/0/11>, </3/0/14>, </3/0/15>, </3/0/16>",
+        assertEquals("</3>,</3/0>,</3/0/0>,</3/0/1>,</3/0/2>,</3/0/11>,</3/0/14>,</3/0/15>,</3/0/16>",
                 Link.serialize(payload));
     }
 
@@ -87,7 +88,7 @@ public class DiscoverTest {
         assertThat(response.getCoapResponse(), is(instanceOf(Response.class)));
 
         Link[] payload = response.getObjectLinks();
-        assertEquals("</3/0>, </3/0/0>, </3/0/1>, </3/0/2>, </3/0/11>, </3/0/14>, </3/0/15>, </3/0/16>",
+        assertEquals("</3/0>,</3/0/0>,</3/0/1>,</3/0/2>,</3/0/11>,</3/0/14>,</3/0/15>,</3/0/16>",
                 Link.serialize(payload));
     }
 

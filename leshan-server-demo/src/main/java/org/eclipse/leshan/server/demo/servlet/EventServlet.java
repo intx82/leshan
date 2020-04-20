@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -24,17 +24,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.servlet.http.HttpServletRequest;
 
 import org.eclipse.californium.core.network.Endpoint;
+import org.eclipse.jetty.servlets.EventSource;
+import org.eclipse.jetty.servlets.EventSourceServlet;
 import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.response.ObserveResponse;
-import org.eclipse.leshan.server.californium.impl.LeshanServer;
+import org.eclipse.leshan.server.californium.LeshanServer;
 import org.eclipse.leshan.server.demo.servlet.json.LwM2mNodeSerializer;
 import org.eclipse.leshan.server.demo.servlet.json.RegistrationSerializer;
 import org.eclipse.leshan.server.demo.servlet.log.CoapMessage;
 import org.eclipse.leshan.server.demo.servlet.log.CoapMessageListener;
 import org.eclipse.leshan.server.demo.servlet.log.CoapMessageTracer;
-import org.eclipse.leshan.server.demo.utils.EventSource;
-import org.eclipse.leshan.server.demo.utils.EventSourceServlet;
 import org.eclipse.leshan.server.observation.ObservationListener;
 import org.eclipse.leshan.server.queue.PresenceListener;
 import org.eclipse.leshan.server.registration.Registration;
@@ -87,7 +87,10 @@ public class EventServlet extends EventSourceServlet {
         @Override
         public void updated(RegistrationUpdate update, Registration updatedRegistration,
                 Registration previousRegistration) {
-            String jReg = EventServlet.this.gson.toJson(updatedRegistration);
+            RegUpdate regUpdate = new RegUpdate();
+            regUpdate.registration = updatedRegistration;
+            regUpdate.update = update;
+            String jReg = EventServlet.this.gson.toJson(regUpdate);
             sendEvent(EVENT_UPDATED, jReg, updatedRegistration.getEndpoint());
         }
 
@@ -250,5 +253,11 @@ public class EventServlet extends EventSourceServlet {
         public String getEndpoint() {
             return endpoint;
         }
+    }
+
+    @SuppressWarnings("unused")
+    private class RegUpdate {
+        public Registration registration;
+        public RegistrationUpdate update;
     }
 }

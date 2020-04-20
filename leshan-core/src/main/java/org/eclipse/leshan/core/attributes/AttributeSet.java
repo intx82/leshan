@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2018 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -131,7 +131,11 @@ public class AttributeSet {
     public String[] toQueryParams() {
         List<String> queries = new LinkedList<>();
         for (Attribute attr : attributeMap.values()) {
-            queries.add(String.format("%s=%s", attr.getCoRELinkParam(), attr.getValue()));
+            if (attr.getValue() != null) {
+                queries.add(String.format("%s=%s", attr.getCoRELinkParam(), attr.getValue()));
+            } else {
+                queries.add(attr.getCoRELinkParam());
+            }
         }
         return queries.toArray(new String[queries.size()]);
     }
@@ -207,10 +211,14 @@ public class AttributeSet {
 
         for (String param : queryParams) {
             String[] keyAndValue = param.split("=");
-            if (keyAndValue.length != 2) {
+            if (keyAndValue.length == 1) {
+                attributes.add(new Attribute(keyAndValue[0]));
+            } else if (keyAndValue.length == 2) {
+                attributes.add(new Attribute(keyAndValue[0], keyAndValue[1]));
+            } else {
                 throw new IllegalArgumentException(String.format("Cannot parse query param '%s'", param));
             }
-            attributes.add(Attribute.create(keyAndValue[0], keyAndValue[1]));
+
         }
         return new AttributeSet(attributes);
     }

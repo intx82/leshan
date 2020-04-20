@@ -2,11 +2,11 @@
  * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -16,7 +16,8 @@
 package org.eclipse.leshan.json;
 
 import org.eclipse.leshan.core.model.ResourceModel.Type;
-import org.eclipse.leshan.core.model.json.JsonSerDes;
+import org.eclipse.leshan.util.json.JsonException;
+import org.eclipse.leshan.util.json.JsonSerDes;
 
 import com.eclipsesource.json.JsonObject;
 import com.eclipsesource.json.JsonValue;
@@ -24,9 +25,10 @@ import com.eclipsesource.json.JsonValue;
 public class JsonArrayEntrySerDes extends JsonSerDes<JsonArrayEntry> {
 
     @Override
-    public JsonObject jSerialize(JsonArrayEntry jae) {
+    public JsonObject jSerialize(JsonArrayEntry jae) throws JsonException {
         JsonObject o = new JsonObject();
-        o.add("n", jae.getName());
+        if (jae.getName() != null)
+            o.add("n", jae.getName());
         Type type = jae.getType();
         if (type != null) {
             switch (jae.getType()) {
@@ -43,7 +45,7 @@ public class JsonArrayEntrySerDes extends JsonSerDes<JsonArrayEntry> {
                 o.add("sv", jae.getStringValue());
                 break;
             default:
-                break;
+                throw new JsonException("JsonArrayEntry MUST have a value : %s", jae);
             }
         }
         if (jae.getTime() != null)
@@ -52,7 +54,7 @@ public class JsonArrayEntrySerDes extends JsonSerDes<JsonArrayEntry> {
     };
 
     @Override
-    public JsonArrayEntry deserialize(JsonObject o) {
+    public JsonArrayEntry deserialize(JsonObject o) throws JsonException {
         if (o == null)
             return null;
 
@@ -78,6 +80,10 @@ public class JsonArrayEntrySerDes extends JsonSerDes<JsonArrayEntry> {
         JsonValue ov = o.get("ov");
         if (ov != null && ov.isString())
             jae.setObjectLinkValue(ov.asString());
+
+        if (jae.getType() == null) {
+            throw new JsonException("Missing value(v,bv,ov,sv) field for entry %s", o.toString());
+        }
 
         return jae;
     }

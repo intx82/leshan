@@ -2,11 +2,11 @@
  * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -41,7 +41,7 @@ public class Server {
             uri.append("coaps://");
         else
             uri.append("coap://");
-        uri.append(identity.getPeerAddress().getAddress().getHostAddress());
+        uri.append(identity.getPeerAddress().getHostString());
         uri.append(":");
         uri.append(identity.getPeerAddress().getPort());
         return uri.toString();

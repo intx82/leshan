@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -26,7 +26,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * An object description
+ * An object description.
+ * 
+ * @see Lwm2M specification D.1 Object Template
+ * @see http://openmobilealliance.org/tech/profiles/LWM2M.xsd
  */
 public class ObjectModel {
 
@@ -75,6 +78,17 @@ public class ObjectModel {
 
     public boolean isOmaObject() {
         return id >= OMA_OBJECT_MIN_ID && id <= OMA_OBJECT_MAX_ID;
+    }
+
+    /**
+     * @return the version and if the version is null or empty return the default value 1.0
+     * @see ObjectModel#DEFAULT_VERSION
+     */
+    public String getVersion() {
+        if (version == null || version.isEmpty()) {
+            return ObjectModel.DEFAULT_VERSION;
+        }
+        return version;
     }
 
     @Override

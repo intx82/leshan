@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -48,8 +48,8 @@ public final class LinkFormatHelper {
 
         // create links for "object"
         String rootURL = getPath("/", root);
-        Map<String, Object> attributes = new HashMap<>();
-        attributes.put("rt", "oma.lwm2m");
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("rt", "\"oma.lwm2m\"");
         links.add(new Link(rootURL, attributes));
 
         // sort resources
@@ -67,7 +67,7 @@ public final class LinkFormatHelper {
 
             List<Integer> availableInstance = objectEnabler.getAvailableInstanceIds();
             // Include an object link if there are no instances or there are object attributes (e.g. "ver")
-            Map<String, ?> objectAttributes = getObjectAttributes(objectEnabler.getObjectModel());
+            Map<String, String> objectAttributes = getObjectAttributes(objectEnabler.getObjectModel());
             if (availableInstance.isEmpty() || (objectAttributes != null)) {
                 String objectInstanceUrl = getPath("/", root, Integer.toString(objectEnabler.getId()));
                 links.add(new Link(objectInstanceUrl, objectAttributes));
@@ -89,7 +89,7 @@ public final class LinkFormatHelper {
         String rootPath = root == null ? "" : root;
 
         // create link for "object"
-        Map<String, ?> objectAttributes = getObjectAttributes(objectEnabler.getObjectModel());
+        Map<String, String> objectAttributes = getObjectAttributes(objectEnabler.getObjectModel());
         String objectURL = getPath("/", rootPath, Integer.toString(objectEnabler.getId()));
         links.add(new Link(objectURL, objectAttributes));
 
@@ -192,7 +192,7 @@ public final class LinkFormatHelper {
         return sb.toString();
     }
 
-    private static Map<String, ?> getObjectAttributes(ObjectModel objectModel) {
+    private static Map<String, String> getObjectAttributes(ObjectModel objectModel) {
         if (StringUtils.isEmpty(objectModel.version) || ObjectModel.DEFAULT_VERSION.equals(objectModel.version)) {
             return null;
         }

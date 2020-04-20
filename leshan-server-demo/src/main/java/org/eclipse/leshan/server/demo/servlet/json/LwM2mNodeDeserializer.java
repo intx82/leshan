@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -16,6 +16,7 @@
 package org.eclipse.leshan.server.demo.servlet.json;
 
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -50,12 +51,15 @@ public class LwM2mNodeDeserializer implements JsonDeserializer<LwM2mNode> {
         if (json.isJsonObject()) {
             JsonObject object = (JsonObject) json;
 
-            if (!object.has("id")) {
-                throw new JsonParseException("Missing id");
+            Integer id = null;
+            if (object.has("id")) {
+                id = object.get("id").getAsInt();
             }
-            int id = object.get("id").getAsInt();
 
             if (object.has("instances")) {
+                if (id == null) {
+                    throw new JsonParseException("Missing id");
+                }
 
                 JsonArray array = object.get("instances").getAsJsonArray();
                 LwM2mObjectInstance[] instances = new LwM2mObjectInstance[array.size()];
@@ -72,14 +76,23 @@ public class LwM2mNodeDeserializer implements JsonDeserializer<LwM2mNode> {
                 for (int i = 0; i < array.size(); i++) {
                     resources[i] = context.deserialize(array.get(i), LwM2mNode.class);
                 }
-                node = new LwM2mObjectInstance(id, resources);
-
+                if (id == null) {
+                    node = new LwM2mObjectInstance(Arrays.asList(resources));
+                } else {
+                    node = new LwM2mObjectInstance(id, resources);
+                }
             } else if (object.has("value")) {
+                if (id == null) {
+                    throw new JsonParseException("Missing id");
+                }
                 // single value resource
                 JsonPrimitive val = object.get("value").getAsJsonPrimitive();
                 org.eclipse.leshan.core.model.ResourceModel.Type expectedType = getTypeFor(val);
                 node = LwM2mSingleResource.newResource(id, deserializeValue(val, expectedType), expectedType);
             } else if (object.has("values")) {
+                if (id == null) {
+                    throw new JsonParseException("Missing id");
+                }
                 // multi-instances resource
                 Map<Integer, Object> values = new HashMap<>();
                 org.eclipse.leshan.core.model.ResourceModel.Type expectedType = null;

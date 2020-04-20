@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  *
@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.leshan.client.LwM2mClient;
 import org.eclipse.leshan.client.request.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel;
@@ -38,6 +39,7 @@ public class BaseInstanceEnabler implements LwM2mInstanceEnabler {
     protected List<ResourceChangedListener> listeners = new ArrayList<>();
     protected Integer id = null;
     protected ObjectModel model;
+    protected LwM2mClient lwm2mClient;
 
     public BaseInstanceEnabler() {
     }
@@ -66,6 +68,15 @@ public class BaseInstanceEnabler implements LwM2mInstanceEnabler {
     }
 
     @Override
+    public void setLwM2mClient(LwM2mClient client) {
+        this.lwm2mClient = client;
+    }
+
+    public LwM2mClient getLwM2mClient() {
+        return lwm2mClient;
+    }
+
+    @Override
     public void addResourceChangedListener(ResourceChangedListener listener) {
         listeners.add(listener);
     }
@@ -75,6 +86,16 @@ public class BaseInstanceEnabler implements LwM2mInstanceEnabler {
         listeners.remove(listener);
     }
 
+    /**
+     * To be used to notify that 1 or several resources change.
+     * <p>
+     * This method SHOULD NOT be called in a synchronize block or any thread synchronization tools to avoid any risk of
+     * deadlock.
+     * <p>
+     * Calling this method is needed to trigger NOTIFICATION when an observe relation is established.
+     * 
+     * @param resourceIds
+     */
     public void fireResourcesChange(int... resourceIds) {
         for (ResourceChangedListener listener : listeners) {
             listener.resourcesChanged(resourceIds);

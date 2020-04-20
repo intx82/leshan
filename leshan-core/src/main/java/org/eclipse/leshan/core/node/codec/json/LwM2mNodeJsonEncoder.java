@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -35,6 +35,7 @@ import org.eclipse.leshan.core.node.codec.LwM2mValueConverter;
 import org.eclipse.leshan.json.JsonArrayEntry;
 import org.eclipse.leshan.json.JsonRootObject;
 import org.eclipse.leshan.json.LwM2mJson;
+import org.eclipse.leshan.json.LwM2mJsonException;
 import org.eclipse.leshan.util.Base64;
 import org.eclipse.leshan.util.Validate;
 import org.slf4j.Logger;
@@ -58,8 +59,12 @@ public class LwM2mNodeJsonEncoder {
         node.accept(internalEncoder);
         JsonRootObject jsonObject = new JsonRootObject();
         jsonObject.setResourceList(internalEncoder.resourceList);
-        jsonObject.setBaseName(path.toString());
-        return LwM2mJson.toJsonLwM2m(jsonObject).getBytes();
+        jsonObject.setBaseName(internalEncoder.baseName);
+        try {
+            return LwM2mJson.toJsonLwM2m(jsonObject).getBytes();
+        } catch (LwM2mJsonException e) {
+            throw new CodecException(e, "Unable to encode node[path:%s] : %s", path, node);
+        }
     }
 
     public static byte[] encodeTimestampedData(List<TimestampedLwM2mNode> timestampedNodes, LwM2mPath path,
@@ -70,6 +75,7 @@ public class LwM2mNodeJsonEncoder {
 
         InternalEncoder internalEncoder = new InternalEncoder();
         ArrayList<JsonArrayEntry> entries = new ArrayList<>();
+        String baseName = null;
         for (TimestampedLwM2mNode timestampedLwM2mNode : timestampedNodes) {
             internalEncoder.objectId = path.getObjectId();
             internalEncoder.model = model;
@@ -79,11 +85,25 @@ public class LwM2mNodeJsonEncoder {
             internalEncoder.timestamp = timestampedLwM2mNode.getTimestamp();
             timestampedLwM2mNode.getNode().accept(internalEncoder);
             entries.addAll(internalEncoder.resourceList);
+            if (baseName != null) {
+                if (!baseName.equals(internalEncoder.baseName)) {
+                    throw new CodecException(
+                            "Unexpected baseName %s (%s expected) when encoding timestamped nodes for request %s",
+                            internalEncoder.baseName, baseName, path);
+                }
+            } else {
+                baseName = internalEncoder.baseName;
+            }
         }
         JsonRootObject jsonObject = new JsonRootObject();
         jsonObject.setResourceList(entries);
-        jsonObject.setBaseName(path.toString());
-        return LwM2mJson.toJsonLwM2m(jsonObject).getBytes();
+        jsonObject.setBaseName(internalEncoder.baseName);
+        try {
+            return LwM2mJson.toJsonLwM2m(jsonObject).getBytes();
+        } catch (LwM2mJsonException e) {
+            throw new CodecException(e, "Unable to encode timestamped nodes[path:%s] : %s", path, timestampedNodes);
+        }
+
     }
 
     private static class InternalEncoder implements LwM2mNodeVisitor {
@@ -96,6 +116,7 @@ public class LwM2mNodeJsonEncoder {
 
         // visitor output
         private ArrayList<JsonArrayEntry> resourceList = null;
+        private String baseName = null;
 
         @Override
         public void visit(LwM2mObject object) {
@@ -104,6 +125,7 @@ public class LwM2mNodeJsonEncoder {
             if (!requestPath.isObject()) {
                 throw new CodecException("Invalid request path %s for JSON object encoding", requestPath);
             }
+            baseName = requestPath.toString() + "/";
 
             // Create resources
             resourceList = new ArrayList<>();
@@ -119,6 +141,9 @@ public class LwM2mNodeJsonEncoder {
         public void visit(LwM2mObjectInstance instance) {
             LOG.trace("Encoding object instance {} into JSON", instance);
             resourceList = new ArrayList<>();
+            if (instance.getId() == LwM2mObjectInstance.UNDEFINED) {
+                throw new CodecException("Unable to use JSON format without to give the object instance Id");
+            }
             for (LwM2mResource resource : instance.getResources().values()) {
                 // Validate request path & compute resource path
                 String prefixPath;
@@ -129,6 +154,7 @@ public class LwM2mNodeJsonEncoder {
                 } else {
                     throw new CodecException("Invalid request path %s for JSON instance encoding", requestPath);
                 }
+                baseName = requestPath + "/";
                 // Create resources
                 resourceList.addAll(lwM2mResourceToJsonArrayEntry(prefixPath, timestamp, resource));
             }
@@ -140,8 +166,12 @@ public class LwM2mNodeJsonEncoder {
             if (!requestPath.isResource()) {
                 throw new CodecException("Invalid request path %s for JSON resource encoding", requestPath);
             }
-
-            resourceList = lwM2mResourceToJsonArrayEntry("", timestamp, resource);
+            if (resource.isMultiInstances()) {
+                baseName = requestPath.toString() + "/";
+            } else {
+                baseName = requestPath.toString();
+            }
+            resourceList = lwM2mResourceToJsonArrayEntry(null, timestamp, resource);
         }
 
         private ArrayList<JsonArrayEntry> lwM2mResourceToJsonArrayEntry(String resourcePath, Long timestamp,
@@ -183,7 +213,7 @@ public class LwM2mNodeJsonEncoder {
                 jsonResourceElt.setTime(timestamp);
 
                 // Convert value using expected type
-                LwM2mPath lwM2mResourcePath = new LwM2mPath(resourcePath);
+                LwM2mPath lwM2mResourcePath = resourcePath != null ? new LwM2mPath(resourcePath) : null;
                 this.setResourceValue(converter.convertValue(resource.getValue(), resource.getType(), expectedType,
                         lwM2mResourcePath), expectedType, jsonResourceElt, lwM2mResourcePath);
 

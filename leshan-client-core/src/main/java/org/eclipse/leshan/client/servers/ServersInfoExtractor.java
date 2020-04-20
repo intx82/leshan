@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -23,6 +23,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -31,7 +32,6 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Map;
 
@@ -46,6 +46,7 @@ import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.request.ReadRequest;
 import org.eclipse.leshan.core.response.ReadResponse;
+import org.eclipse.leshan.util.SecurityUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -119,7 +120,7 @@ public class ServersInfoExtractor {
                             info.lifetime = (long) server.getResource(SRV_LIFETIME).getValue();
                             info.binding = BindingMode.valueOf((String) server.getResource(SRV_BINDING).getValue());
 
-                            infos.deviceMangements.put(info.serverId, info);
+                            infos.deviceManagements.put(info.serverId, info);
                             break;
                         }
                     }
@@ -136,7 +137,7 @@ public class ServersInfoExtractor {
         if (info == null)
             return null;
 
-        return info.deviceMangements.get(shortID);
+        return info.deviceManagements.get(shortID);
     }
 
     public static ServerInfo getBootstrapServerInfo(Map<Integer, LwM2mObjectEnabler> objectEnablers) {
@@ -145,6 +146,26 @@ public class ServersInfoExtractor {
             return null;
 
         return info.bootstrap;
+    }
+
+    public static Long getLifeTime(LwM2mObjectEnabler serverEnabler, int instanceId) {
+        ReadResponse response = serverEnabler.read(ServerIdentity.SYSTEM,
+                new ReadRequest(SERVER, instanceId, SRV_LIFETIME));
+        if (response.isSuccess()) {
+            return (Long) ((LwM2mResource) response.getContent()).getValue();
+        } else {
+            return null;
+        }
+    }
+
+    public static BindingMode getBindingMode(LwM2mObjectEnabler serverEnabler, int instanceId) {
+        ReadResponse response = serverEnabler.read(ServerIdentity.SYSTEM,
+                new ReadRequest(SERVER, instanceId, SRV_BINDING));
+        if (response.isSuccess()) {
+            return BindingMode.valueOf((String) ((LwM2mResource) response.getContent()).getValue());
+        } else {
+            return null;
+        }
     }
 
     public static SecurityMode getSecurityMode(LwM2mObjectInstance securityInstance) {
@@ -177,42 +198,29 @@ public class ServersInfoExtractor {
 
     private static PrivateKey getPrivateKey(LwM2mObjectInstance securityInstance) {
         byte[] encodedKey = (byte[]) securityInstance.getResource(SEC_SECRET_KEY).getValue();
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(encodedKey);
-        String algorithm = "EC";
         try {
-            KeyFactory kf = KeyFactory.getInstance(algorithm);
-            return kf.generatePrivate(keySpec);
-        } catch (NoSuchAlgorithmException e) {
-            LOG.warn("Failed to instantiate key factory for algorithm " + algorithm, e);
-        } catch (InvalidKeySpecException e) {
-            LOG.warn("Failed to decode RFC5958 private key with algorithm " + algorithm, e);
+            return SecurityUtil.privateKey.decode(encodedKey);
+        } catch (IOException | GeneralSecurityException e) {
+            LOG.debug("Failed to decode RFC5958 private key", e);
+            return null;
         }
-        return null;
     }
 
     private static PublicKey getServerPublicKey(LwM2mObjectInstance securityInstance) {
         byte[] encodedKey = (byte[]) securityInstance.getResource(SEC_SERVER_PUBKEY).getValue();
-        X509EncodedKeySpec keySpec = new X509EncodedKeySpec(encodedKey);
-        String algorithm = "EC";
         try {
-            KeyFactory kf = KeyFactory.getInstance(algorithm);
-            return kf.generatePublic(keySpec);
-        } catch (NoSuchAlgorithmException e) {
-            LOG.debug("Failed to instantiate key factory for algorithm " + algorithm, e);
-        } catch (InvalidKeySpecException e) {
-            LOG.debug("Failed to decode RFC7250 public key with algorithm " + algorithm, e);
+            return SecurityUtil.publicKey.decode(encodedKey);
+        } catch (IOException | GeneralSecurityException e) {
+            LOG.debug("Failed to decode RFC7250 public key", e);
+            return null;
         }
-        return null;
     }
 
     private static Certificate getServerCertificate(LwM2mObjectInstance securityInstance) {
         byte[] encodedCert = (byte[]) securityInstance.getResource(SEC_SERVER_PUBKEY).getValue();
         try {
-            CertificateFactory cf = CertificateFactory.getInstance("X.509");
-            try (ByteArrayInputStream in = new ByteArrayInputStream(encodedCert)) {
-                return cf.generateCertificate(in);
-            }
-        } catch (CertificateException | IOException e) {
+            return SecurityUtil.certificate.decode(encodedCert);
+        } catch (IOException | GeneralSecurityException e) {
             LOG.debug("Failed to decode X.509 certificate", e);
             return null;
         }

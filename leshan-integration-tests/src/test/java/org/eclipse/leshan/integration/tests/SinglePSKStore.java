@@ -2,11 +2,11 @@
  * Copyright (c) 2018 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -17,44 +17,54 @@ package org.eclipse.leshan.integration.tests;
 
 import java.net.InetSocketAddress;
 
+import javax.crypto.SecretKey;
+
+import org.eclipse.californium.scandium.dtls.PskPublicInformation;
 import org.eclipse.californium.scandium.dtls.pskstore.PskStore;
+import org.eclipse.californium.scandium.util.SecretUtil;
 import org.eclipse.californium.scandium.util.ServerNames;
 
 public class SinglePSKStore implements PskStore {
 
-    private String identity;
-    private byte[] key;
+    private PskPublicInformation identity;
+    private SecretKey key;
 
-    public SinglePSKStore(String identity, byte[] key) {
+    public SinglePSKStore(PskPublicInformation identity, byte[] key) {
+        this.identity = identity;
+        this.key = SecretUtil.create(key, "PSK");
+    }
+
+    public SinglePSKStore(PskPublicInformation identity, SecretKey key) {
         this.identity = identity;
         this.key = key;
     }
 
     @Override
-    public byte[] getKey(String identity) {
-        return key;
+    public SecretKey getKey(PskPublicInformation identity) {
+        return SecretUtil.create(key);
     }
 
     @Override
-    public byte[] getKey(ServerNames serverName, String identity) {
-        throw new UnsupportedOperationException();
+    public SecretKey getKey(ServerNames serverName, PskPublicInformation identity) {
+        // we do not support SNI
+        return getKey(identity);
     }
 
     @Override
-    public String getIdentity(InetSocketAddress inetAddress) {
+    public PskPublicInformation getIdentity(InetSocketAddress inetAddress) {
         return identity;
     }
 
     @Override
-    public String getIdentity(InetSocketAddress peerAddress, ServerNames virtualHost) {
+    public PskPublicInformation getIdentity(InetSocketAddress peerAddress, ServerNames virtualHost) {
         throw new UnsupportedOperationException();
     }
 
     public void setKey(byte[] key) {
-        this.key = key;
+        this.key = SecretUtil.create(key, "PSK");
     }
 
     public void setIdentity(String identity) {
-        this.identity = identity;
+        this.identity = new PskPublicInformation(identity);
     }
 }

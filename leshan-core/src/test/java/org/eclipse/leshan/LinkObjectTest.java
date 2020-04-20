@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -14,6 +14,8 @@
  *     Sierra Wireless - initial API and implementation
  *******************************************************************************/
 package org.eclipse.leshan;
+
+import static org.junit.Assert.assertEquals;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -26,14 +28,13 @@ public class LinkObjectTest {
 
     @Test
     public void parse_with_some_attributes() {
-        Link[] parse = Link
-                .parse("</>;rt=\"oma.lwm2m\";ct=100, </1/101>,</1/102>, </2/0>, </2/1> ;empty".getBytes());
+        Link[] parse = Link.parse("</>;rt=\"oma.lwm2m\";ct=100, </1/101>,</1/102>, </2/0>, </2/1> ;empty".getBytes());
         Assert.assertEquals(5, parse.length);
         Assert.assertEquals("/", parse[0].getUrl());
 
-        Map<String, Object> attResult = new HashMap<>();
-        attResult.put("rt", "oma.lwm2m");
-        attResult.put("ct", 100);
+        Map<String, String> attResult = new HashMap<>();
+        attResult.put("rt", "\"oma.lwm2m\"");
+        attResult.put("ct", "100");
         Assert.assertEquals(attResult, parse[0].getAttributes());
 
         Assert.assertEquals("/1/101", parse[1].getUrl());
@@ -59,7 +60,7 @@ public class LinkObjectTest {
         Assert.assertEquals("/", parse[0].getUrl());
 
         Map<String, String> attResult = new HashMap<>();
-        attResult.put("k1", "quotes\"inside");
+        attResult.put("k1", "\"quotes\"inside\"");
         attResult.put("k2", "endwithquotes\"");
         attResult.put("k3", "noquotes");
         attResult.put("k4", "\"startwithquotes");
@@ -74,35 +75,27 @@ public class LinkObjectTest {
 
         String res = Link.serialize(obj1, obj2, obj3);
 
-        Assert.assertEquals("</1/0/1>, </2/1>, </3>", res);
+        Assert.assertEquals("</1/0/1>,</2/1>,</3>", res);
 
     }
 
     @Test
     public void serialyse_with_attributes() {
-        HashMap<String, Object> attributesObj1 = new HashMap<>();
-        attributesObj1.put("number", 12);
-        Link obj1 = new Link("/1/0/1", attributesObj1);
-
-        HashMap<String, Object> attributesObj2 = new HashMap<>();
-        attributesObj2.put("string", "stringval");
-        Link obj2 = new Link("/2/1", attributesObj2);
-
-        HashMap<String, Object> attributesObj3 = new HashMap<>();
-        attributesObj3.put("empty", null);
-        Link obj3 = new Link("/3", attributesObj3);
+        Link obj1 = new Link("/1/0/1", "number", "12");
+        Link obj2 = new Link("/2/1", "string", "\"stringval\"");
+        Link obj3 = new Link("/3", "empty", null);
 
         String res = Link.serialize(obj1, obj2, obj3);
 
-        Assert.assertEquals("</1/0/1>;number=12, </2/1>;string=\"stringval\", </3>;empty", res);
+        Assert.assertEquals("</1/0/1>;number=12,</2/1>;string=\"stringval\",</3>;empty", res);
 
     }
 
     @Test
     public void serialyse_with_root_url() {
-        HashMap<String, Object> attributesObj1 = new HashMap<>();
+        HashMap<String, Integer> attributesObj1 = new HashMap<>();
         attributesObj1.put("number", 12);
-        Link obj1 = new Link("/", attributesObj1);
+        Link obj1 = new Link("/", attributesObj1, Integer.class);
 
         String res = Link.serialize(obj1);
 
@@ -116,11 +109,11 @@ public class LinkObjectTest {
         attributesObj1.put("number1", 1);
         attributesObj1.put("number2", 1);
         attributesObj1.put("string1", "stringval1");
-        Link obj1 = new Link("/1/0", attributesObj1);
+        Link obj1 = new Link("/1/0", attributesObj1, Object.class);
 
-        HashMap<String, Object> attributesObj2 = new HashMap<>();
+        HashMap<String, Integer> attributesObj2 = new HashMap<>();
         attributesObj2.put("number3", 3);
-        Link obj2 = new Link("/2", attributesObj2);
+        Link obj2 = new Link("/2", attributesObj2, Integer.class);
 
         Link[] input = new Link[] { obj1, obj2 };
         String strObjs = Link.serialize(input);
@@ -132,10 +125,32 @@ public class LinkObjectTest {
 
     @Test
     public void parse_then_serialyse_with_rt_attribute() {
-        String input = "</lwm2m>;rt=\"oma.lwm2m\", </lwm2m/1/101>, </lwm2m/1/102>, </lwm2m/2/0>";
+        String input = "</lwm2m>;rt=\"oma.lwm2m\",</lwm2m/1/101>,</lwm2m/1/102>,</lwm2m/2/0>";
         Link[] objs = Link.parse(input.getBytes());
         String output = Link.serialize(objs);
         Assert.assertEquals(input, output);
 
+    }
+
+    @Test
+    public void parse_quoted_ver_attributes() {
+        String input = "</1>;ver=\"2.2\"";
+        Link[] objs = Link.parse(input.getBytes());
+        assertEquals(objs[0].getAttributes().get("ver"), "\"2.2\"");
+    }
+
+    @Test
+    public void parse_unquoted_ver_attributes() {
+        String input = "</1>;ver=2.2";
+        Link[] objs = Link.parse(input.getBytes());
+        assertEquals(objs[0].getAttributes().get("ver"), "2.2");
+    }
+
+    @Test
+    public void serialyse_ver_attributes_without_quote() {
+        Map<String, String> att = new HashMap<>();
+        att.put("ver", "2.2");
+        Link link = new Link("/1", att);
+        assertEquals("</1>;ver=2.2", Link.serialize(link));
     }
 }

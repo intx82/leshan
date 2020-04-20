@@ -2,11 +2,11 @@
  * Copyright (c) 2017 RISE SICS AB.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -18,6 +18,7 @@ package org.eclipse.leshan.server.queue;
 import org.eclipse.leshan.core.request.DownlinkRequest;
 import org.eclipse.leshan.core.request.exception.ClientSleepingException;
 import org.eclipse.leshan.core.request.exception.TimeoutException;
+import org.eclipse.leshan.core.request.exception.UnconnectedPeerException;
 import org.eclipse.leshan.core.response.ErrorCallback;
 import org.eclipse.leshan.core.response.LwM2mResponse;
 import org.eclipse.leshan.core.response.ResponseCallback;
@@ -25,6 +26,9 @@ import org.eclipse.leshan.server.registration.Registration;
 import org.eclipse.leshan.server.request.LwM2mRequestSender;
 import org.eclipse.leshan.util.Validate;
 
+/**
+ * A {@link LwM2mRequestSender} which supports LWM2M Queue Mode.
+ */
 public class QueueModeLwM2mRequestSender implements LwM2mRequestSender {
 
     protected PresenceServiceImpl presenceService;
@@ -43,6 +47,9 @@ public class QueueModeLwM2mRequestSender implements LwM2mRequestSender {
         this.delegatedSender = delegatedSender;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public <T extends LwM2mResponse> T send(final Registration destination, DownlinkRequest<T> request, long timeout)
             throws InterruptedException {
@@ -60,20 +67,28 @@ public class QueueModeLwM2mRequestSender implements LwM2mRequestSender {
         }
 
         // Use delegation to send the request
-        T response = delegatedSender.send(destination, request, timeout);
-        if (response != null) {
+        try {
+            T response = delegatedSender.send(destination, request, timeout);
+            if (response != null) {
+                // Set the client awake. This will restart the timer.
+                presenceService.setAwake(destination);
+            } else {
+                // If the timeout expires, this means the client does not respond.
+                presenceService.setSleeping(destination);
+            }
 
-            // Set the client awake. This will restart the timer.
-            presenceService.setAwake(destination);
-        } else {
-
-            // If the timeout expires, this means the client does not respond.
-            presenceService.clientNotResponding(destination);
+            // Wait for response, then return it
+            return response;
+        } catch (UnconnectedPeerException e) {
+            // if peer is not connected (No DTLS connection available)
+            presenceService.setSleeping(destination);
+            throw e;
         }
-        // Wait for response, then return it
-        return response;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public <T extends LwM2mResponse> void send(final Registration destination, DownlinkRequest<T> request, long timeout,
             final ResponseCallback<T> responseCallback, final ErrorCallback errorCallback) {
@@ -106,7 +121,10 @@ public class QueueModeLwM2mRequestSender implements LwM2mRequestSender {
             public void onError(Exception e) {
                 if (e instanceof TimeoutException) {
                     // If the timeout expires, this means the client does not respond.
-                    presenceService.clientNotResponding(destination);
+                    presenceService.setSleeping(destination);
+                } else if (e instanceof UnconnectedPeerException) {
+                    // if peer is not connected (No DTLS connection available)
+                    presenceService.setSleeping(destination);
                 }
 
                 // Call the user's callback
@@ -117,7 +135,7 @@ public class QueueModeLwM2mRequestSender implements LwM2mRequestSender {
     }
 
     @Override
-    public void cancelPendingRequests(Registration registration) {
-        delegatedSender.cancelPendingRequests(registration);
+    public void cancelOngoingRequests(Registration registration) {
+        delegatedSender.cancelOngoingRequests(registration);
     }
 }

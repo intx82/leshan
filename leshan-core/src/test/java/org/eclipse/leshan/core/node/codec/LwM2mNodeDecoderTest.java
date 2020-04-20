@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -29,6 +29,7 @@ import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel;
 import org.eclipse.leshan.core.model.ResourceModel.Operations;
 import org.eclipse.leshan.core.model.ResourceModel.Type;
+import org.eclipse.leshan.core.model.StaticModel;
 import org.eclipse.leshan.core.node.LwM2mMultipleResource;
 import org.eclipse.leshan.core.node.LwM2mObject;
 import org.eclipse.leshan.core.node.LwM2mObjectInstance;
@@ -38,6 +39,7 @@ import org.eclipse.leshan.core.node.LwM2mSingleResource;
 import org.eclipse.leshan.core.node.ObjectLink;
 import org.eclipse.leshan.core.node.TimestampedLwM2mNode;
 import org.eclipse.leshan.core.request.ContentFormat;
+import org.eclipse.leshan.json.LwM2mJsonException;
 import org.eclipse.leshan.tlv.Tlv;
 import org.eclipse.leshan.tlv.Tlv.TlvType;
 import org.eclipse.leshan.tlv.TlvEncoder;
@@ -74,7 +76,7 @@ public class LwM2mNodeDecoderTest {
         objects.add(
                 new ObjectModel(66, "object link tests 66", "", ObjectModel.DEFAULT_VERSION, true, false, resForObj66));
 
-        model = new LwM2mModel(objects);
+        model = new StaticModel(objects);
         decoder = new DefaultLwM2mNodeDecoder();
     }
 
@@ -226,6 +228,27 @@ public class LwM2mNodeDecoderTest {
     }
 
     @Test
+    public void text_decode_opaque_from_base64_string() throws CodecException {
+        // Using Firmware Update/Package
+        LwM2mSingleResource resource = (LwM2mSingleResource) decoder.decode("AQIDBAU=".getBytes(StandardCharsets.UTF_8),
+                ContentFormat.TEXT, new LwM2mPath(5, 0, 0), model);
+
+        byte[] expectedValue = new byte[] { 0x1, 0x2, 0x3, 0x4, 0x5 };
+
+        assertEquals(0, resource.getId());
+        assertFalse(resource.isMultiInstances());
+        assertEquals(Type.OPAQUE, resource.getType());
+        assertArrayEquals(expectedValue, ((byte[]) resource.getValue()));
+    }
+
+    @Test(expected = CodecException.class)
+    public void text_decode_should_throw_an_exception_for_invalid_base64() throws CodecException {
+        // Using Firmware Update/Package
+        decoder.decode("!,-INVALID$_'".getBytes(StandardCharsets.UTF_8), ContentFormat.TEXT, new LwM2mPath(5, 0, 0),
+                model);
+    }
+
+    @Test
     public void tlv_manufacturer_resource() throws CodecException {
         String value = "MyManufacturer";
         byte[] content = TlvEncoder.encode(new Tlv[] { new Tlv(TlvType.RESOURCE_VALUE, null, value.getBytes(), 0) })
@@ -335,15 +358,17 @@ public class LwM2mNodeDecoderTest {
         assertEquals(5L, resource.getValue(1));
     }
 
-    @Test(expected = CodecException.class)
-    public void tlv_multi_instance_object__missing_instance_tlv() throws CodecException {
-
+    @Test
+    public void tlv_instance_without_id_tlv() throws CodecException {
+        // this is "special" case where instance ID is not defined ...
         byte[] content = TlvEncoder
                 .encode(new Tlv[] { new Tlv(TlvType.RESOURCE_VALUE, null, TlvEncoder.encodeInteger(11), 1),
                                         new Tlv(TlvType.RESOURCE_VALUE, null, TlvEncoder.encodeInteger(10), 2) })
                 .array();
 
-        decoder.decode(content, ContentFormat.TLV, new LwM2mPath(2), model);
+        LwM2mObject object = (LwM2mObject) decoder.decode(content, ContentFormat.TLV, new LwM2mPath(2), model);
+        assertEquals(object.getInstances().size(), 1);
+        assertEquals(object.getInstances().values().iterator().next().getId(), LwM2mObjectInstance.UNDEFINED);
     }
 
     @Test
@@ -439,7 +464,8 @@ public class LwM2mNodeDecoderTest {
     public void json_device_object_instance0() throws CodecException {
         // json content for instance 0 of device object
         StringBuilder b = new StringBuilder();
-        b.append("{\"e\":[");
+        b.append("{\"bn\":\"/3/0/\",");
+        b.append("\"e\":[");
         b.append("{\"n\":\"0\",\"sv\":\"Open Mobile Alliance\"},");
         b.append("{\"n\":\"1\",\"sv\":\"Lightweight M2M Client\"},");
         b.append("{\"n\":\"2\",\"sv\":\"345000123\"},");
@@ -464,7 +490,7 @@ public class LwM2mNodeDecoderTest {
     }
 
     @Test
-    public void json_device_object_instance0_with_root_basename() throws CodecException {
+    public void json_device_object_instance0_with_empty_root_basename() throws CodecException {
         // json content for instance 0 of device object
         StringBuilder b = new StringBuilder();
         b.append("{\"bn\":\"/\",");
@@ -493,10 +519,38 @@ public class LwM2mNodeDecoderTest {
     }
 
     @Test
-    public void json_custom_object_instance() throws CodecException {
+    public void json_device_object_instance0_without_basename() throws CodecException {
         // json content for instance 0 of device object
         StringBuilder b = new StringBuilder();
         b.append("{\"e\":[");
+        b.append("{\"n\":\"/3/0/0\",\"sv\":\"Open Mobile Alliance\"},");
+        b.append("{\"n\":\"/3/0/1\",\"sv\":\"Lightweight M2M Client\"},");
+        b.append("{\"n\":\"/3/0/2\",\"sv\":\"345000123\"},");
+        b.append("{\"n\":\"/3/0/3\",\"sv\":\"1.0\"},");
+        b.append("{\"n\":\"/3/0/6/0\",\"v\":1},");
+        b.append("{\"n\":\"/3/0/6/1\",\"v\":5},");
+        b.append("{\"n\":\"/3/0/7/0\",\"v\":3800},");
+        b.append("{\"n\":\"/3/0/7/1\",\"v\":5000},");
+        b.append("{\"n\":\"/3/0/8/0\",\"v\":125},");
+        b.append("{\"n\":\"/3/0/8/1\",\"v\":900},");
+        b.append("{\"n\":\"/3/0/9\",\"v\":100},");
+        b.append("{\"n\":\"/3/0/10\",\"v\":15},");
+        b.append("{\"n\":\"/3/0/11/0\",\"v\":0},");
+        b.append("{\"n\":\"/3/0/13\",\"v\":1367491215},");
+        b.append("{\"n\":\"/3/0/14\",\"sv\":\"+02:00\"},");
+        b.append("{\"n\":\"/3/0/16\",\"sv\":\"U\"}]}");
+
+        LwM2mObjectInstance oInstance = (LwM2mObjectInstance) decoder.decode(b.toString().getBytes(),
+                ContentFormat.JSON, new LwM2mPath(3, 0), model);
+
+        assertDeviceInstance(oInstance);
+    }
+
+    @Test
+    public void json_custom_object_instance() throws CodecException {
+        // json content for instance 0 of device object
+        StringBuilder b = new StringBuilder();
+        b.append("{\"bn\":\"1024/0/\", \"e\":[");
         b.append("{\"n\":\"0\",\"sv\":\"a string\"},");
         b.append("{\"n\":\"1\",\"v\":10.5},");
         b.append("{\"n\":\"2\",\"bv\":true}]}");
@@ -514,10 +568,10 @@ public class LwM2mNodeDecoderTest {
     public void json_timestamped_resources() throws CodecException {
         // json content for instance 0 of device object
         StringBuilder b = new StringBuilder();
-        b.append("{\"e\":[");
-        b.append("{\"n\":\"\",\"v\":22.9,\"t\":-30},");
-        b.append("{\"n\":\"\",\"v\":22.4,\"t\":-5},");
-        b.append("{\"n\":\"\",\"v\":24.1,\"t\":-50}],");
+        b.append("{\"bn\":\"/1024/0/1\",\"e\":[");
+        b.append("{\"v\":22.9,\"t\":-30},");
+        b.append("{\"v\":22.4,\"t\":-5},");
+        b.append("{\"v\":24.1,\"t\":-50}],");
         b.append("\"bt\":25462634}");
 
         List<TimestampedLwM2mNode> timestampedResources = decoder.decodeTimestampedData(b.toString().getBytes(),
@@ -536,7 +590,7 @@ public class LwM2mNodeDecoderTest {
     public void json_timestamped_instances() throws CodecException {
         // json content for instance 0 of device object
         StringBuilder b = new StringBuilder();
-        b.append("{\"e\":[");
+        b.append("{\"bn\":\"/1024/0/\",\"e\":[");
         b.append("{\"n\":\"1\",\"v\":22.9,\"t\":-30},");
         b.append("{\"n\":\"1\",\"v\":22.4,\"t\":-5},");
         b.append("{\"n\":\"0\",\"sv\":\"a string\",\"t\":-5},");
@@ -563,7 +617,7 @@ public class LwM2mNodeDecoderTest {
     public void json_timestamped_Object() throws CodecException {
         // json content for instance 0 of device object
         StringBuilder b = new StringBuilder();
-        b.append("{\"e\":[");
+        b.append("{\"bn\":\"/1024/\",\"e\":[");
         b.append("{\"n\":\"0/1\",\"v\":22.9,\"t\":-30},");
         b.append("{\"n\":\"0/1\",\"v\":22.4,\"t\":-5},");
         b.append("{\"n\":\"0/0\",\"sv\":\"a string\",\"t\":-5},");
@@ -593,13 +647,17 @@ public class LwM2mNodeDecoderTest {
     @Test
     public void json_empty_object() {
         // Completely empty
+        LwM2mObject obj = null;
         StringBuilder b = new StringBuilder();
         b.append("{}");
-        LwM2mObject obj = (LwM2mObject) decoder.decode(b.toString().getBytes(), ContentFormat.JSON, new LwM2mPath(2),
-                model);
-        assertNotNull(obj);
-        assertEquals(2, obj.getId());
-        assertTrue(obj.getInstances().isEmpty());
+        boolean failedWithCodecException = false;
+        try {
+            obj = (LwM2mObject) decoder.decode(b.toString().getBytes(), ContentFormat.JSON, new LwM2mPath(2), model);
+        } catch (CodecException e) {
+            assertTrue(e.getCause() instanceof LwM2mJsonException);
+            failedWithCodecException = true;
+        }
+        assertTrue("Should failed with codec exception", failedWithCodecException);
 
         // with empty resource list
         b = new StringBuilder();
@@ -621,13 +679,18 @@ public class LwM2mNodeDecoderTest {
     @Test
     public void json_empty_instance() {
         // Completely empty
+        LwM2mObjectInstance instance = null;
         StringBuilder b = new StringBuilder();
         b.append("{}");
-        LwM2mObjectInstance instance = (LwM2mObjectInstance) decoder.decode(b.toString().getBytes(), ContentFormat.JSON,
-                new LwM2mPath(2, 0), model);
-        assertNotNull(instance);
-        assertEquals(0, instance.getId());
-        assertTrue(instance.getResources().isEmpty());
+        boolean failedWithCodecException = false;
+        try {
+            instance = (LwM2mObjectInstance) decoder.decode(b.toString().getBytes(), ContentFormat.JSON,
+                    new LwM2mPath(2, 0), model);
+        } catch (CodecException e) {
+            assertTrue(e.getCause() instanceof LwM2mJsonException);
+            failedWithCodecException = true;
+        }
+        assertTrue("Should failed with codec exception", failedWithCodecException);
 
         // with empty resource list
         b = new StringBuilder();
@@ -651,7 +714,7 @@ public class LwM2mNodeDecoderTest {
     @Test(expected = CodecException.class)
     public void json_empty_single_resource() {
         StringBuilder b = new StringBuilder();
-        b.append("{}");
+        b.append("{\"bn\":\"2/0/0\", \"e\":[]}");
 
         decoder.decode(b.toString().getBytes(), ContentFormat.JSON, new LwM2mPath(2, 0, 0), model);
     }
@@ -659,14 +722,18 @@ public class LwM2mNodeDecoderTest {
     @Test
     public void json_empty_multi_resource() {
         // Completely empty
+        LwM2mResource resource = null;
         StringBuilder b = new StringBuilder();
         b.append("{}");
-        LwM2mResource resource = (LwM2mResource) decoder.decode(b.toString().getBytes(), ContentFormat.JSON,
-                new LwM2mPath(3, 0, 6), model);
-        assertNotNull(resource);
-        assertTrue(resource instanceof LwM2mMultipleResource);
-        assertEquals(6, resource.getId());
-        assertTrue(resource.getValues().isEmpty());
+        boolean failedWithCodecException = false;
+        try {
+            resource = (LwM2mResource) decoder.decode(b.toString().getBytes(), ContentFormat.JSON,
+                    new LwM2mPath(3, 0, 6), model);
+        } catch (CodecException e) {
+            assertTrue(e.getCause() instanceof LwM2mJsonException);
+            failedWithCodecException = true;
+        }
+        assertTrue("Should failed with codec exception", failedWithCodecException);
 
         // with empty resource list
         b = new StringBuilder();
@@ -689,10 +756,25 @@ public class LwM2mNodeDecoderTest {
         assertTrue(resource.getValues().isEmpty());
     }
 
+    @Test
+    public void json_missing_value_for_resource() {
+
+        StringBuilder b = new StringBuilder();
+        b.append("{\"bn\":\"2/0/\",\"e\":[");
+        b.append("{\"n\":\"0\"}");
+        b.append("]}");
+        try {
+            decoder.decode(b.toString().getBytes(), ContentFormat.JSON, new LwM2mPath(2, 0, 0), model);
+            fail();
+        } catch (CodecException e) {
+            assertTrue(e.getCause() instanceof LwM2mJsonException);
+        }
+    }
+
     @Test(expected = CodecException.class)
     public void json_invalid_instance_2_resources_with_the_same_id() {
         StringBuilder b = new StringBuilder();
-        b.append("{\"e\":[");
+        b.append("{\"bn\":\"3/0/\",\"e\":[");
         b.append("{\"n\":\"1\",\"sv\":\"client1\"},");
         b.append("{\"n\":\"1\",\"sv\":\"client2\"}");
         b.append("]}");
@@ -703,11 +785,27 @@ public class LwM2mNodeDecoderTest {
     @Test(expected = CodecException.class)
     public void json_invalid_multi_resource_2_instances_with_the_same_id() {
         StringBuilder b = new StringBuilder();
-        b.append("{\"e\":[");
+        b.append("{\"bn\":\"3/0/11/\",\"e\":[");
         b.append("{\"n\":\"1\",\"v\":2},");
         b.append("{\"n\":\"1\",\"v\":0}");
         b.append("]}");
 
         decoder.decode(b.toString().getBytes(), ContentFormat.JSON, new LwM2mPath(3, 0, 11), model);
+    }
+
+    @Test
+    public void json_cut_basename_name_in_the_middle_of_an_id() {
+        StringBuilder b = new StringBuilder();
+        b.append("{\"bn\":\"3/0/1\",\"e\":[");
+        b.append("{\"n\":\"1/0\",\"v\":0},");
+        b.append("{\"n\":\"1/1\",\"v\":0}");
+        b.append("]}");
+
+        LwM2mResource resource = (LwM2mResource) decoder.decode(b.toString().getBytes(), ContentFormat.JSON,
+                new LwM2mPath(3, 0, 11), model);
+        assertNotNull(resource);
+        assertTrue(resource instanceof LwM2mMultipleResource);
+        assertEquals(11, resource.getId());
+        assertTrue(resource.getValues().size() == 2);
     }
 }

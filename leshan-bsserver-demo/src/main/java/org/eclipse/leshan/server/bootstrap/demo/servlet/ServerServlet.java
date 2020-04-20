@@ -2,11 +2,11 @@
  * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -29,7 +29,7 @@ import org.apache.commons.lang.StringUtils;
 import org.eclipse.leshan.server.bootstrap.demo.json.PublicKeySerDes;
 import org.eclipse.leshan.server.bootstrap.demo.json.SecuritySerializer;
 import org.eclipse.leshan.server.bootstrap.demo.json.X509CertificateSerDes;
-import org.eclipse.leshan.server.californium.impl.LeshanBootstrapServer;
+import org.eclipse.leshan.server.californium.bootstrap.LeshanBootstrapServer;
 import org.eclipse.leshan.server.security.SecurityInfo;
 
 import com.eclipsesource.json.JsonObject;

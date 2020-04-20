@@ -2,11 +2,11 @@
  * Copyright (c) 2016 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -24,9 +24,6 @@ import org.eclipse.leshan.server.registration.Registration;
  * This class is responsible to authorize up-link request from LWM2M client.
  */
 public interface Authorizer {
-
-    // TODO remove the BAD_REQUEST code if https://github.com/OpenMobileAlliance/OMA_LwM2M_for_Developers/issues/181 is
-    // closed.
 
     /**
      * Return the registration if this request should be handle by the LWM2M Server. When <code>null</code> is returned

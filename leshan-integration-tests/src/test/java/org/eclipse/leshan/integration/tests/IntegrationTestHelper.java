@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -37,20 +37,23 @@ import org.eclipse.leshan.client.request.ServerIdentity;
 import org.eclipse.leshan.client.resource.DummyInstanceEnabler;
 import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
-import org.eclipse.leshan.core.model.LwM2mModel;
+import org.eclipse.leshan.client.resource.SimpleInstanceEnabler;
 import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel;
 import org.eclipse.leshan.core.model.ResourceModel.Operations;
 import org.eclipse.leshan.core.model.ResourceModel.Type;
+import org.eclipse.leshan.core.model.StaticModel;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.response.ExecuteResponse;
+import org.eclipse.leshan.server.californium.LeshanServer;
 import org.eclipse.leshan.server.californium.LeshanServerBuilder;
-import org.eclipse.leshan.server.californium.impl.LeshanServer;
-import org.eclipse.leshan.server.impl.InMemorySecurityStore;
-import org.eclipse.leshan.server.impl.RegistrationServiceImpl;
 import org.eclipse.leshan.server.model.StaticModelProvider;
 import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationServiceImpl;
+import org.eclipse.leshan.server.security.InMemorySecurityStore;
 
 /**
  * Helper for running a server and executing a client against it.
@@ -71,6 +74,8 @@ public class IntegrationTestHelper {
     public static final int OPAQUE_RESOURCE_ID = 5;
     public static final int OBJLNK_MULTI_INSTANCE_RESOURCE_ID = 6;
     public static final int OBJLNK_SINGLE_INSTANCE_RESOURCE_ID = 7;
+    public static final int INTEGER_MANDATORY_RESOURCE_ID = 8;
+    public static final int STRING_MANDATORY_RESOURCE_ID = 9;
 
     LeshanServer server;
     LeshanClient client;
@@ -104,9 +109,13 @@ public class IntegrationTestHelper {
                 false, Type.OBJLNK, null, null, null);
         ResourceModel objlnkSinglefield = new ResourceModel(OBJLNK_SINGLE_INSTANCE_RESOURCE_ID, "objlnk", Operations.RW,
                 false, false, Type.OBJLNK, null, null, null);
-        objectModels.add(new ObjectModel(TEST_OBJECT_ID, "testobject", null, ObjectModel.DEFAULT_VERSION, false, false,
+        ResourceModel integermandatoryfield = new ResourceModel(INTEGER_MANDATORY_RESOURCE_ID, "integermandatory",
+                Operations.RW, false, true, Type.INTEGER, null, null, null);
+        ResourceModel stringmandatoryfield = new ResourceModel(STRING_MANDATORY_RESOURCE_ID, "stringmandatory",
+                Operations.RW, false, true, Type.STRING, null, null, null);
+        objectModels.add(new ObjectModel(TEST_OBJECT_ID, "testobject", null, ObjectModel.DEFAULT_VERSION, true, false,
                 stringfield, booleanfield, integerfield, floatfield, timefield, opaquefield, objlnkfield,
-                objlnkSinglefield));
+                objlnkSinglefield, integermandatoryfield, stringmandatoryfield));
 
         return objectModels;
     }
@@ -145,18 +154,20 @@ public class IntegrationTestHelper {
 
     public void createClient(Map<String, String> additionalAttributes) {
         // Create objects Enabler
-        ObjectsInitializer initializer = new ObjectsInitializer(new LwM2mModel(createObjectModels()));
+        ObjectsInitializer initializer = new ObjectsInitializer(new StaticModel(createObjectModels()));
         initializer.setInstancesForObject(LwM2mId.SECURITY, Security.noSec(
                 "coap://" + server.getUnsecuredAddress().getHostString() + ":" + server.getUnsecuredAddress().getPort(),
                 12345));
         initializer.setInstancesForObject(LwM2mId.SERVER, new Server(12345, LIFETIME, BindingMode.U, false));
         initializer.setInstancesForObject(LwM2mId.DEVICE, new TestDevice("Eclipse Leshan", MODEL_NUMBER, "12345", "U"));
         initializer.setClassForObject(LwM2mId.ACCESS_CONTROL, DummyInstanceEnabler.class);
-        initializer.setDummyInstancesForObject(2000);
+        initializer.setInstancesForObject(TEST_OBJECT_ID, new DummyInstanceEnabler(0),
+                new SimpleInstanceEnabler(1, OPAQUE_RESOURCE_ID, new byte[0]));
         List<LwM2mObjectEnabler> objects = initializer.createAll();
 
         // Build Client
         LeshanClientBuilder builder = new LeshanClientBuilder(currentEndpointIdentifier.get());
+        builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
         builder.setAdditionalAttributes(additionalAttributes);
         builder.setObjects(objects);
         client = builder.build();
@@ -171,6 +182,7 @@ public class IntegrationTestHelper {
 
     protected LeshanServerBuilder createServerBuilder() {
         LeshanServerBuilder builder = new LeshanServerBuilder();
+        builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
         builder.setObjectModelProvider(new StaticModelProvider(createObjectModels()));
         builder.setLocalAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
         builder.setLocalSecureAddress(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
@@ -222,13 +234,21 @@ public class IntegrationTestHelper {
         }
     }
 
+    public void waitForBootstrapFinishedAtClientSide(long timeInSeconds) {
+        try {
+            assertTrue(clientObserver.waitForBootstrap(timeInSeconds, TimeUnit.SECONDS));
+        } catch (InterruptedException | TimeoutException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public void ensureNoUpdate(long timeInSeconds) {
         try {
             registrationListener.waitForUpdate(timeInSeconds, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } catch (TimeoutException e) {
-            // timeou means no registration
+            // timeout means no registration
             return;
         }
         fail("No update registration expected");
@@ -256,7 +276,7 @@ public class IntegrationTestHelper {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } catch (TimeoutException e) {
-            // timeou means no registration
+            // timeout means no registration
             return;
         }
         fail("No de-registration expected");

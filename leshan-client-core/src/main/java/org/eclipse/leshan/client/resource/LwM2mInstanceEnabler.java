@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  *
@@ -20,6 +20,7 @@ package org.eclipse.leshan.client.resource;
 
 import java.util.List;
 
+import org.eclipse.leshan.client.LwM2mClient;
 import org.eclipse.leshan.client.request.ServerIdentity;
 import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.node.LwM2mObjectInstance;
@@ -70,6 +71,13 @@ public interface LwM2mInstanceEnabler {
      * @param model the model of this instance
      */
     void setModel(ObjectModel model);
+
+    /**
+     * Set the lwm2mclient linked to this instance. It should only be called by {@link ObjectEnabler}.
+     * 
+     * @param client the {@link LwM2mClient} which hold this instance.
+     */
+    void setLwM2mClient(LwM2mClient client);
 
     /**
      * Adds a callback handler that gets notified about changes to any of this LWM2M object instance's resources.

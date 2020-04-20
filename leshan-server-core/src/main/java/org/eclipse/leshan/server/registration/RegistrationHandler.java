@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -17,7 +17,6 @@
  *******************************************************************************/
 package org.eclipse.leshan.server.registration;
 
-import java.net.InetSocketAddress;
 import java.util.Date;
 
 import org.eclipse.leshan.core.request.DeregisterRequest;
@@ -28,7 +27,6 @@ import org.eclipse.leshan.core.response.DeregisterResponse;
 import org.eclipse.leshan.core.response.RegisterResponse;
 import org.eclipse.leshan.core.response.SendableResponse;
 import org.eclipse.leshan.core.response.UpdateResponse;
-import org.eclipse.leshan.server.impl.RegistrationServiceImpl;
 import org.eclipse.leshan.server.security.Authorizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,12 +50,10 @@ public class RegistrationHandler {
         this.registrationIdProvider = registrationIdProvider;
     }
 
-    public SendableResponse<RegisterResponse> register(Identity sender, RegisterRequest registerRequest,
-            InetSocketAddress serverEndpoint) {
+    public SendableResponse<RegisterResponse> register(Identity sender, RegisterRequest registerRequest) {
 
         Registration.Builder builder = new Registration.Builder(
-                registrationIdProvider.getRegistrationId(registerRequest), registerRequest.getEndpointName(), sender,
-                serverEndpoint);
+                registrationIdProvider.getRegistrationId(registerRequest), registerRequest.getEndpointName(), sender);
 
         builder.lwM2mVersion(registerRequest.getLwVersion()).lifeTimeInSec(registerRequest.getLifetime())
                 .bindingMode(registerRequest.getBindingMode()).objectLinks(registerRequest.getObjectLinks())
@@ -101,8 +97,6 @@ public class RegistrationHandler {
         }
 
         if (authorizer.isAuthorized(updateRequest, registration, sender) == null) {
-            // TODO replace by Forbidden if https://github.com/OpenMobileAlliance/OMA_LwM2M_for_Developers/issues/181 is
-            // closed.
             return new SendableResponse<>(UpdateResponse.badRequest("forbidden"));
         }
 
@@ -138,8 +132,6 @@ public class RegistrationHandler {
             return new SendableResponse<>(DeregisterResponse.notFound());
         }
         if (authorizer.isAuthorized(deregisterRequest, registration, sender) == null) {
-            // TODO replace by Forbidden if https://github.com/OpenMobileAlliance/OMA_LwM2M_for_Developers/issues/181 is
-            // closed.
             return new SendableResponse<>(DeregisterResponse.badRequest("forbidden"));
         }
 

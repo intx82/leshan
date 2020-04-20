@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -28,12 +28,14 @@ import java.util.Arrays;
 import org.eclipse.californium.core.network.CoapEndpoint;
 import org.eclipse.californium.core.network.config.NetworkConfig;
 import org.eclipse.californium.core.network.config.NetworkConfig.Keys;
+import org.eclipse.californium.elements.DtlsEndpointContext;
+import org.eclipse.californium.elements.UDPConnector;
 import org.eclipse.californium.scandium.DTLSConnector;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
 import org.eclipse.californium.scandium.dtls.CertificateType;
 import org.eclipse.leshan.LwM2m;
+import org.eclipse.leshan.core.californium.DefaultEndpointFactory;
 import org.eclipse.leshan.core.californium.EndpointFactory;
-import org.eclipse.leshan.core.californium.Lwm2mEndpointContextMatcher;
 import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
@@ -41,11 +43,8 @@ import org.eclipse.leshan.core.node.codec.LwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.LwM2mNodeEncoder;
 import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.request.exception.ClientSleepingException;
-import org.eclipse.leshan.server.LwM2mServer;
-import org.eclipse.leshan.server.californium.impl.InMemoryRegistrationStore;
-import org.eclipse.leshan.server.californium.impl.LeshanServer;
-import org.eclipse.leshan.server.californium.impl.LwM2mPskStore;
-import org.eclipse.leshan.server.impl.InMemorySecurityStore;
+import org.eclipse.leshan.server.californium.registration.CaliforniumRegistrationStore;
+import org.eclipse.leshan.server.californium.registration.InMemoryRegistrationStore;
 import org.eclipse.leshan.server.model.LwM2mModelProvider;
 import org.eclipse.leshan.server.model.StandardModelProvider;
 import org.eclipse.leshan.server.queue.ClientAwakeTimeProvider;
@@ -56,6 +55,7 @@ import org.eclipse.leshan.server.registration.RegistrationIdProvider;
 import org.eclipse.leshan.server.registration.RegistrationStore;
 import org.eclipse.leshan.server.security.Authorizer;
 import org.eclipse.leshan.server.security.DefaultAuthorizer;
+import org.eclipse.leshan.server.security.InMemorySecurityStore;
 import org.eclipse.leshan.server.security.SecurityInfo;
 import org.eclipse.leshan.server.security.SecurityStore;
 import org.slf4j.Logger;
@@ -64,7 +64,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Class helping you to build and configure a Californium based Leshan Lightweight M2M server. Usage: create it, call
  * the different setters for changing the configuration and then call the {@link #build()} method for creating the
- * {@link LwM2mServer} ready to operate.
+ * {@link LeshanServer} ready to operate.
  */
 public class LeshanServerBuilder {
 
@@ -291,8 +291,13 @@ public class LeshanServerBuilder {
     }
 
     /**
-     * Used to create custom CoAP endpoint, this is only for advanced users. <br>
-     * DTLSConnector is expected for secured endpoint.
+     * Advanced setter used to create custom CoAP endpoint.
+     * <p>
+     * An {@link UDPConnector} is expected for unsecured endpoint and a {@link DTLSConnector} is expected for secured
+     * endpoint.
+     * 
+     * @param endpointFactory An {@link EndpointFactory}, you can extends {@link DefaultEndpointFactory}.
+     * @return the builder for fluent Bootstrap Server creation.
      */
     public LeshanServerBuilder setEndpointFactory(EndpointFactory endpointFactory) {
         this.endpointFactory = endpointFactory;
@@ -327,7 +332,11 @@ public class LeshanServerBuilder {
     }
 
     /**
-     * Sets a new {@link ClientAwakeTimeProvider} object different from the default one (93 seconds).
+     * Sets a new {@link ClientAwakeTimeProvider} object different from the default one.
+     * <p>
+     * By default a {@link StaticClientAwakeTimeProvider} will be used initialized with the
+     * <code>MAX_TRANSMIT_WAIT</code> value available in CoAP {@link NetworkConfig} which should be by default 93s as
+     * defined in <a href="https://tools.ietf.org/html/rfc7252#section-4.8.2">RFC7252</a>.
      * 
      * @param awakeTimeProvider the {@link ClientAwakeTimeProvider} to set.
      */
@@ -351,12 +360,18 @@ public class LeshanServerBuilder {
     public static NetworkConfig createDefaultNetworkConfig() {
         NetworkConfig networkConfig = new NetworkConfig();
         networkConfig.set(Keys.MID_TRACKER, "NULL");
-        // Workaround for https://github.com/eclipse/leshan/issues/502
-        // TODO remove this line when we will integrate Cf 2.0.0-M10
-        // networkConfig.set(Keys.HEALTH_STATUS_INTERVAL, 0);
+        networkConfig.set(Keys.USE_MESSAGE_OFFLOADING, false);
         return networkConfig;
     }
 
+    /**
+     * Create the {@link LeshanServer}.
+     * <p>
+     * Next step will be to start it : {@link LeshanServer#start()}.
+     * 
+     * @return the LWM2M server.
+     * @throws IllegalStateException if builder configuration is not consistent.
+     */
     public LeshanServer build() {
         if (localAddress == null)
             localAddress = new InetSocketAddress(LwM2m.DEFAULT_COAP_PORT);
@@ -372,25 +387,37 @@ public class LeshanServerBuilder {
             decoder = new DefaultLwM2mNodeDecoder();
         if (coapConfig == null)
             coapConfig = createDefaultNetworkConfig();
-        if (awakeTimeProvider == null)
-            awakeTimeProvider = new StaticClientAwakeTimeProvider();
+        if (awakeTimeProvider == null) {
+            int maxTransmitWait = coapConfig.getInt(Keys.MAX_TRANSMIT_WAIT);
+            if (maxTransmitWait == 0) {
+                LOG.warn(
+                        "No value available for MAX_TRANSMIT_WAIT in CoAP NetworkConfig. Fallback with a default 93s value.");
+                awakeTimeProvider = new StaticClientAwakeTimeProvider();
+            } else {
+                awakeTimeProvider = new StaticClientAwakeTimeProvider(maxTransmitWait);
+            }
+        }
         if (registrationIdProvider == null)
             registrationIdProvider = new RandomStringRegistrationIdProvider();
+        if (endpointFactory == null) {
+            endpointFactory = new DefaultEndpointFactory("LWM2M Server");
+        }
 
         // handle dtlsConfig
         DtlsConnectorConfig dtlsConfig = null;
-        if (!noSecuredEndpoint) {
+        if (!noSecuredEndpoint && shouldTryToCreateSecureEndpoint()) {
             if (dtlsConfigBuilder == null) {
                 dtlsConfigBuilder = new DtlsConnectorConfig.Builder();
             }
-            // set default DTLS setting for Leshan unless user change it.
+            // Set default DTLS setting for Leshan unless user change it.
             DtlsConnectorConfig incompleteConfig = dtlsConfigBuilder.getIncompleteConfig();
+
             // Handle PSK Store
-            if (incompleteConfig.getPskStore() == null && securityStore != null) {
-                dtlsConfigBuilder.setPskStore(new LwM2mPskStore(this.securityStore, registrationStore));
-            } else {
+            if (incompleteConfig.getPskStore() != null) {
                 LOG.warn(
                         "PskStore should be automatically set by Leshan. Using a custom implementation is not advised.");
+            } else if (securityStore != null) {
+                dtlsConfigBuilder.setPskStore(new LwM2mPskStore(this.securityStore, registrationStore));
             }
 
             // Handle secure address
@@ -471,6 +498,12 @@ public class LeshanServerBuilder {
                 dtlsConfigBuilder.setSniEnabled(false);
             }
 
+            // Do no allow Server to initiated Handshake by default, for U device request will be allowed to initiate
+            // handshake (see Registration.shouldInitiateConnection())
+            if (incompleteConfig.getDefaultHandshakeMode() == null) {
+                dtlsConfigBuilder.setDefaultHandshakeMode(DtlsEndpointContext.HANDSHAKE_MODE_NONE);
+            }
+
             // we try to build the dtlsConfig, if it fail we will just not create the secured endpoint
             try {
                 dtlsConfig = dtlsConfigBuilder.build();
@@ -482,30 +515,12 @@ public class LeshanServerBuilder {
         // create endpoints
         CoapEndpoint unsecuredEndpoint = null;
         if (!noUnsecuredEndpoint) {
-            if (endpointFactory != null) {
-                unsecuredEndpoint = endpointFactory.createUnsecuredEndpoint(localAddress, coapConfig,
-                        registrationStore);
-            } else {
-                CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
-                builder.setInetSocketAddress(localAddress);
-                builder.setNetworkConfig(coapConfig);
-                builder.setObservationStore(registrationStore);
-                unsecuredEndpoint = builder.build();
-            }
+            unsecuredEndpoint = endpointFactory.createUnsecuredEndpoint(localAddress, coapConfig, registrationStore);
         }
 
         CoapEndpoint securedEndpoint = null;
         if (!noSecuredEndpoint && dtlsConfig != null) {
-            if (endpointFactory != null) {
-                securedEndpoint = endpointFactory.createSecuredEndpoint(dtlsConfig, coapConfig, registrationStore);
-            } else {
-                CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
-                builder.setConnector(new DTLSConnector(dtlsConfig));
-                builder.setNetworkConfig(coapConfig);
-                builder.setObservationStore(registrationStore);
-                builder.setEndpointContextMatcher(new Lwm2mEndpointContextMatcher());
-                securedEndpoint = builder.build();
-            }
+            securedEndpoint = endpointFactory.createSecuredEndpoint(dtlsConfig, coapConfig, registrationStore);
         }
 
         if (securedEndpoint == null && unsecuredEndpoint == null) {
@@ -513,6 +528,45 @@ public class LeshanServerBuilder {
                     "All CoAP enpoints are deactivated, at least one endpoint should be activated");
         }
 
+        return createServer(unsecuredEndpoint, securedEndpoint, registrationStore, securityStore, authorizer,
+                modelProvider, encoder, decoder, coapConfig, noQueueMode, awakeTimeProvider, registrationIdProvider);
+    }
+
+    /**
+     * @return true if we should try to create a secure endpoint on {@link #build()}
+     */
+    protected boolean shouldTryToCreateSecureEndpoint() {
+        return dtlsConfigBuilder != null || certificateChain != null || privateKey != null || publicKey != null
+                || securityStore != null || trustedCertificates != null;
+    }
+
+    /**
+     * Create the <code>LeshanServer</code>.
+     * <p>
+     * You can extend <code>LeshanServerBuilder</code> and override this method to create a new builder which will be
+     * able to build an extended <code>LeshanServer</code>.
+     * 
+     * @param unsecuredEndpoint CoAP endpoint used for <code>coap://<code> communication.
+     * @param securedEndpoint CoAP endpoint used for <code>coaps://<code> communication.
+     * @param registrationStore the {@link Registration} store.
+     * @param securityStore the {@link SecurityInfo} store.
+     * @param authorizer define which devices is allow to register on this server.
+     * @param modelProvider provides the objects description for each client.
+     * @param decoder decoder used to decode response payload.
+     * @param encoder encode used to encode request payload.
+     * @param coapConfig the CoAP {@link NetworkConfig}.
+     * @param noQueueMode true to disable presenceService.
+     * @param awakeTimeProvider to set the client awake time if queue mode is used.
+     * @param registrationIdProvider to provide registrationId using for location-path option values on response of
+     *        Register operation.
+     * 
+     * @return the LWM2M server
+     */
+    protected LeshanServer createServer(CoapEndpoint unsecuredEndpoint, CoapEndpoint securedEndpoint,
+            CaliforniumRegistrationStore registrationStore, SecurityStore securityStore, Authorizer authorizer,
+            LwM2mModelProvider modelProvider, LwM2mNodeEncoder encoder, LwM2mNodeDecoder decoder,
+            NetworkConfig coapConfig, boolean noQueueMode, ClientAwakeTimeProvider awakeTimeProvider,
+            RegistrationIdProvider registrationIdProvider) {
         return new LeshanServer(unsecuredEndpoint, securedEndpoint, registrationStore, securityStore, authorizer,
                 modelProvider, encoder, decoder, coapConfig, noQueueMode, awakeTimeProvider, registrationIdProvider);
     }

@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  *
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  *
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  *
@@ -28,6 +28,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
+import org.eclipse.leshan.core.attributes.AttributeSet;
 import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.node.LwM2mObjectInstance;
 import org.eclipse.leshan.core.node.LwM2mSingleResource;
@@ -40,6 +41,7 @@ import org.eclipse.leshan.core.request.DiscoverRequest;
 import org.eclipse.leshan.core.request.ExecuteRequest;
 import org.eclipse.leshan.core.request.ObserveRequest;
 import org.eclipse.leshan.core.request.ReadRequest;
+import org.eclipse.leshan.core.request.WriteAttributesRequest;
 import org.eclipse.leshan.core.request.WriteRequest;
 import org.eclipse.leshan.core.request.WriteRequest.Mode;
 import org.eclipse.leshan.core.request.WriteAttributesRequest;
@@ -55,9 +57,10 @@ import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.LwM2mResponse;
 import org.eclipse.leshan.core.response.ObserveResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
+import org.eclipse.leshan.core.response.WriteAttributesResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 import org.eclipse.leshan.core.response.WriteAttributesResponse;
-import org.eclipse.leshan.server.LwM2mServer;
+import org.eclipse.leshan.server.californium.LeshanServer;
 import org.eclipse.leshan.server.demo.servlet.json.LwM2mNodeDeserializer;
 import org.eclipse.leshan.server.demo.servlet.json.LwM2mNodeSerializer;
 import org.eclipse.leshan.server.demo.servlet.json.RegistrationSerializer;
@@ -76,18 +79,20 @@ import com.google.gson.JsonSyntaxException;
 public class ClientServlet extends HttpServlet {
 
     private static final String FORMAT_PARAM = "format";
+    private static final String TIMEOUT_PARAM = "timeout";
+    private static final String REPLACE_PARAM = "replace";
 
     private static final Logger LOG = LoggerFactory.getLogger(ClientServlet.class);
 
-    private static final long TIMEOUT = 5000; // ms
+    private static final long DEFAULT_TIMEOUT = 5000; // ms
 
     private static final long serialVersionUID = 1L;
 
-    private final LwM2mServer server;
+    private final LeshanServer server;
 
     private final Gson gson;
 
-    public ClientServlet(LwM2mServer server) {
+    public ClientServlet(LeshanServer server) {
         this.server = server;
 
         GsonBuilder gsonBuilder = new GsonBuilder();
@@ -150,7 +155,7 @@ public class ClientServlet extends HttpServlet {
                 if (registration != null) {
                     // create & process request
                     DiscoverRequest request = new DiscoverRequest(target);
-                    DiscoverResponse cResponse = server.send(registration, request, TIMEOUT);
+                    DiscoverResponse cResponse = server.send(registration, request, extractTimeout(req));
                     processDeviceResponse(req, resp, cResponse);
                 } else {
                     resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -175,7 +180,7 @@ public class ClientServlet extends HttpServlet {
 
                 // create & process request
                 ReadRequest request = new ReadRequest(contentFormat, target);
-                ReadResponse cResponse = server.send(registration, request, TIMEOUT);
+                ReadResponse cResponse = server.send(registration, request, extractTimeout(req));
                 processDeviceResponse(req, resp, cResponse);
             } else {
                 resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -238,7 +243,7 @@ public class ClientServlet extends HttpServlet {
                     target = StringUtils.removeEnd(target, path[path.length - 1]);
                     AttributeSet attributes = AttributeSet.parse(req.getQueryString());
                     WriteAttributesRequest request = new WriteAttributesRequest(target, attributes);
-                    WriteAttributesResponse cResponse = server.send(registration, request, TIMEOUT);
+                    WriteAttributesResponse cResponse = server.send(registration, request, extractTimeout(req));
                     processDeviceResponse(req, resp, cResponse);
                 } else {
                     // get content format
@@ -247,10 +252,17 @@ public class ClientServlet extends HttpServlet {
                             ? ContentFormat.fromName(contentFormatParam.toUpperCase())
                             : null;
 
+                    // get replace parameter
+                    String replaceParam = req.getParameter(REPLACE_PARAM);
+                    boolean replace = true;
+                    if (replaceParam != null)
+                        replace = Boolean.valueOf(replaceParam);
+
                     // create & process request
                     LwM2mNode node = extractLwM2mNode(target, req);
-                    WriteRequest request = new WriteRequest(Mode.REPLACE, contentFormat, target, node);
-                    WriteResponse cResponse = server.send(registration, request, TIMEOUT);
+                    WriteRequest request = new WriteRequest(replace ? Mode.REPLACE : Mode.UPDATE, contentFormat, target,
+                            node);
+                    WriteResponse cResponse = server.send(registration, request, extractTimeout(req));
                     processDeviceResponse(req, resp, cResponse);
                 }
             } else {
@@ -284,7 +296,7 @@ public class ClientServlet extends HttpServlet {
 
                     // create & process request
                     ObserveRequest request = new ObserveRequest(contentFormat, target);
-                    ObserveResponse cResponse = server.send(registration, request, TIMEOUT);
+                    ObserveResponse cResponse = server.send(registration, request, extractTimeout(req));
                     processDeviceResponse(req, resp, cResponse);
                 } else {
                     resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -303,8 +315,12 @@ public class ClientServlet extends HttpServlet {
             try {
                 Registration registration = server.getRegistrationService().getByEndpoint(clientEndpoint);
                 if (registration != null) {
-                    ExecuteRequest request = new ExecuteRequest(target, IOUtils.toString(req.getInputStream()));
-                    ExecuteResponse cResponse = server.send(registration, request, TIMEOUT);
+                    String params = null;
+                    if (req.getContentLength() > 0) {
+                        params = IOUtils.toString(req.getInputStream(), StandardCharsets.UTF_8);
+                    }
+                    ExecuteRequest request = new ExecuteRequest(target, params);
+                    ExecuteResponse cResponse = server.send(registration, request, extractTimeout(req));
                     processDeviceResponse(req, resp, cResponse);
                 } else {
                     resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -330,8 +346,15 @@ public class ClientServlet extends HttpServlet {
                     // create & process request
                     LwM2mNode node = extractLwM2mNode(target, req);
                     if (node instanceof LwM2mObjectInstance) {
-                        CreateRequest request = new CreateRequest(contentFormat, target, (LwM2mObjectInstance) node);
-                        CreateResponse cResponse = server.send(registration, request, TIMEOUT);
+                        CreateRequest request;
+                        if (node.getId() == LwM2mObjectInstance.UNDEFINED) {
+                            request = new CreateRequest(contentFormat, target,
+                                    ((LwM2mObjectInstance) node).getResources().values());
+                        } else {
+                            request = new CreateRequest(contentFormat, target, (LwM2mObjectInstance) node);
+                        }
+
+                        CreateResponse cResponse = server.send(registration, request, extractTimeout(req));
                         processDeviceResponse(req, resp, cResponse);
                     } else {
                         throw new IllegalArgumentException("payload must contain an object instance");
@@ -376,7 +399,7 @@ public class ClientServlet extends HttpServlet {
             Registration registration = server.getRegistrationService().getByEndpoint(clientEndpoint);
             if (registration != null) {
                 DeleteRequest request = new DeleteRequest(target);
-                DeleteResponse cResponse = server.send(registration, request, TIMEOUT);
+                DeleteResponse cResponse = server.send(registration, request, extractTimeout(req));
                 processDeviceResponse(req, resp, cResponse);
             } else {
                 resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -391,7 +414,7 @@ public class ClientServlet extends HttpServlet {
             throws IOException {
         if (cResponse == null) {
             LOG.warn(String.format("Request %s%s timed out.", req.getServletPath(), req.getPathInfo()));
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            resp.setStatus(HttpServletResponse.SC_GATEWAY_TIMEOUT);
             resp.getWriter().append("Request timeout").flush();
         } else {
             String response = this.gson.toJson(cResponse);
@@ -418,5 +441,21 @@ public class ClientServlet extends HttpServlet {
             return LwM2mSingleResource.newStringResource(rscId, content);
         }
         throw new InvalidRequestException("content type %s not supported", req.getContentType());
+    }
+
+    private long extractTimeout(HttpServletRequest req) {
+        // get content format
+        String timeoutParam = req.getParameter(TIMEOUT_PARAM);
+        long timeout;
+        if (timeoutParam != null) {
+            try {
+                timeout = Long.parseLong(timeoutParam) * 1000;
+            } catch (NumberFormatException e) {
+                timeout = DEFAULT_TIMEOUT;
+            }
+        } else {
+            timeout = DEFAULT_TIMEOUT;
+        }
+        return timeout;
     }
 }

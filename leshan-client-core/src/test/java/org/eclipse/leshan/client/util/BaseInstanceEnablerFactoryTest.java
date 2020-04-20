@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -23,15 +23,16 @@ import java.util.List;
 
 import org.eclipse.leshan.LwM2mId;
 import org.eclipse.leshan.client.resource.BaseInstanceEnablerFactory;
-import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
 import org.eclipse.leshan.client.resource.DummyInstanceEnabler;
+import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
 import org.eclipse.leshan.core.model.LwM2mModel;
 import org.eclipse.leshan.core.model.ObjectLoader;
+import org.eclipse.leshan.core.model.StaticModel;
 import org.junit.Test;
 
 public class BaseInstanceEnablerFactoryTest {
 
-    public static final LwM2mModel model = new LwM2mModel(ObjectLoader.loadDefault());
+    public static final LwM2mModel model = new StaticModel(ObjectLoader.loadDefault());
     public static List<Integer> emptyList = Collections.emptyList();
 
     @Test(expected = IllegalStateException.class)

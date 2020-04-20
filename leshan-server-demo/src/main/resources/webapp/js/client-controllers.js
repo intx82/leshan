@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -98,7 +98,7 @@ lwClientControllers.controller('ClientListCtrl', [
             var updateCallback =  function(msg) {
                 $scope.$apply(function() {
                     var client = JSON.parse(msg.data);
-                    $scope.clients = updateClient(client, $scope.clients);
+                    $scope.clients = updateClient(client.registration, $scope.clients);
                 });
             };
 
@@ -173,6 +173,7 @@ lwClientControllers.controller('ClientDetailCtrl', [
 
         // default format
         $scope.settings={};
+        $scope.settings.timeout = {format:"5s", value:5};
         $scope.settings.multi = {format:"TLV"};
         $scope.settings.single = {format:"TLV"};
 
@@ -188,7 +189,7 @@ lwClientControllers.controller('ClientDetailCtrl', [
             $scope.client = data;
 
             // update resource tree with client details
-            lwResources.buildResourceTree($scope.client.rootPath, $scope.client.objectLinks, function (objects){
+            lwResources.buildResourceTree($scope.clientId, $scope.client.rootPath, $scope.client.objectLinks, function (objects){
                 $scope.objects = objects;
             });
 
@@ -199,12 +200,27 @@ lwClientControllers.controller('ClientDetailCtrl', [
                 $scope.$apply(function() {
                     $scope.deregistered = false;
                     $scope.client = JSON.parse(msg.data);
-                    lwResources.buildResourceTree($scope.client.rootPath, $scope.client.objectLinks, function (objects){
+                    lwResources.buildResourceTree($scope.clientId, $scope.client.rootPath, $scope.client.objectLinks, function (objects){
                         $scope.objects = objects;
                     });
                 });
             };
             $scope.eventsource.addEventListener('REGISTRATION', registerCallback, false);
+
+            var updateCallback = function(msg) {
+                $scope.$apply(function() {
+                    $scope.deregistered = false;
+                    var regUpdate = JSON.parse(msg.data);
+                    $scope.client = regUpdate.registration; 
+                    if (regUpdate.update.objectLinks){
+                        lwResources.updateResourceTree($scope.clientId, $scope.objects, $scope.client.rootPath, regUpdate.update.objectLinks, function (objects){
+                            $scope.objects = objects;
+                        });
+                    } 
+                });
+            };
+            $scope.eventsource.addEventListener('UPDATED', updateCallback, false);
+
 
             var deregisterCallback = function(msg) {
                 $scope.$apply(function() {

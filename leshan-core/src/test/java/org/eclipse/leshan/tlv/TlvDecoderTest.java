@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -58,7 +58,6 @@ public class TlvDecoderTest {
         } catch (TlvException ex) {
             // this is very weak assertion since the format of the exception's message could
             // be changed any time
-            // TODO: replace with more robust assertion or simply check for TlvException being thrown
             assertEquals("Impossible to parse TLV: \n0011223344556677889900", ex.getMessage());
         }
     }

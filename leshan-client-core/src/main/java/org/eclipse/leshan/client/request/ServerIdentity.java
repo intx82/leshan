@@ -2,11 +2,11 @@
  * Copyright (c) 2016 Bosch Software Innovations GmbH and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -29,6 +29,8 @@ import org.eclipse.leshan.core.request.Identity;
  */
 public class ServerIdentity extends Identity {
 
+    private static final long serialVersionUID = 1L;
+
     enum Role {
         /**
          * Indicate internal call. Enables the "system" to read protected resources (e.g. resources of the security
@@ -49,7 +51,7 @@ public class ServerIdentity extends Identity {
      * Identity for system calls.
      */
     public final static ServerIdentity SYSTEM = new ServerIdentity(
-            Identity.unsecure(InetSocketAddress.createUnresolved("system", 1)), Role.SYSTEM);
+            Identity.unsecure(InetSocketAddress.createUnresolved(Role.SYSTEM.toString(), 1)), Role.SYSTEM);
 
     /**
      * Role of the associated identity.
@@ -63,7 +65,7 @@ public class ServerIdentity extends Identity {
      * @param identity identity to be used
      * @param role related role
      */
-    private ServerIdentity(Identity identity, Role role) {
+    protected ServerIdentity(Identity identity, Role role) {
         super(identity);
         this.role = role;
     }
@@ -124,4 +126,13 @@ public class ServerIdentity extends Identity {
         return new ServerIdentity(identity, Role.LWM2M_SERVER);
     }
 
+    @Override
+    public String toString() {
+        if (isSystem()) {
+            return this.role.toString();
+        } else {
+            return String.format("%s[%s]", super.toString(), this.role);
+        }
+
+    }
 }

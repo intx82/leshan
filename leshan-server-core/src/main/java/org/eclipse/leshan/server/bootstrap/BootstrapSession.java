@@ -2,11 +2,11 @@
  * Copyright (c) 2016 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -27,6 +27,11 @@ import org.eclipse.leshan.core.request.Identity;
 public interface BootstrapSession {
 
     /**
+     * @Return the identifier for this session
+     */
+    String getId();
+
+    /**
      * @return the endpoint of the LwM2M client.
      */
     String getEndpoint();
@@ -37,7 +42,7 @@ public interface BootstrapSession {
     Identity getIdentity();
 
     /**
-     * @return true if the LwM2M client is authorized to start a bootstrap session.
+     * @return <code>true</code> if the LwM2M client is authorized to start a bootstrap session.
      */
     boolean isAuthorized();
 
@@ -46,4 +51,19 @@ public interface BootstrapSession {
      */
     ContentFormat getContentFormat();
 
+    /**
+     * @return the create time in milliseconds
+     * @see System#currentTimeMillis()
+     */
+    long getCreationTime();
+
+    /**
+     * Cancel the current session
+     */
+    void cancel();
+
+    /**
+     * @return True if this session was cancellled
+     */
+    boolean isCancelled();
 }

@@ -2,11 +2,11 @@
  * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -26,14 +26,28 @@ import java.util.regex.Pattern;
 import javax.security.auth.x500.X500Principal;
 
 import org.eclipse.californium.elements.AddressEndpointContext;
+import org.eclipse.californium.elements.DtlsEndpointContext;
 import org.eclipse.californium.elements.EndpointContext;
+import org.eclipse.californium.elements.MapBasedEndpointContext;
 import org.eclipse.californium.elements.auth.PreSharedKeyIdentity;
 import org.eclipse.californium.elements.auth.RawPublicKeyIdentity;
 import org.eclipse.californium.elements.auth.X509CertPath;
 import org.eclipse.leshan.core.request.Identity;
 
+/**
+ * Utility class used to handle Californium {@link EndpointContext} in Leshan.
+ * <p>
+ * Able to translate Californium {@link EndpointContext} to Leshan {@link Identity} and vice-versa.
+ */
 public class EndpointContextUtil {
 
+    /**
+     * Create Leshan {@link Identity} from Californium {@link EndpointContext}.
+     * 
+     * @param context The Californium {@link EndpointContext} to convert.
+     * @return The corresponding Leshan {@link Identity}.
+     * @throws IllegalStateException if we are not able to extract {@link Identity}.
+     */
     public static Identity extractIdentity(EndpointContext context) {
         InetSocketAddress peerAddress = context.getPeerAddress();
         Principal senderIdentity = context.getPeerIdentity();
@@ -48,18 +62,22 @@ public class EndpointContextUtil {
                 String x509CommonName = extractCN(senderIdentity.getName());
                 return Identity.x509(peerAddress, x509CommonName);
             }
-            throw new IllegalStateException("Unable to extract sender identity : unexpected type of Principal");
+            throw new IllegalStateException(
+                    String.format("Unable to extract sender identity : unexpected type of Principal %s [%s]",
+                            senderIdentity.getClass(), senderIdentity.toString()));
         }
         return Identity.unsecure(peerAddress);
     }
 
     /**
-     * Create californium endpoint context from leshan identity.
+     * Create Californium {@link EndpointContext} from Leshan {@link Identity}.
      * 
-     * @param identity leshan identity received on last registration.
-     * @return californium endpoint context for leshan identity
+     * @param identity The Leshan {@link Identity} to convert.
+     * @param allowConnectionInitiation This request can initiate a Handshake if there is no DTLS connection.
+     * 
+     * @return The corresponding Californium {@link EndpointContext}.
      */
-    public static EndpointContext extractContext(Identity identity) {
+    public static EndpointContext extractContext(Identity identity, boolean allowConnectionInitiation) {
         Principal peerIdentity = null;
         if (identity != null) {
             if (identity.isPSK()) {
@@ -71,14 +89,19 @@ public class EndpointContextUtil {
                 peerIdentity = new X500Principal("CN=" + identity.getX509CommonName());
             }
         }
+
+        if (peerIdentity != null && allowConnectionInitiation) {
+            return new MapBasedEndpointContext(identity.getPeerAddress(), peerIdentity,
+                    DtlsEndpointContext.KEY_HANDSHAKE_MODE, DtlsEndpointContext.HANDSHAKE_MODE_AUTO);
+        }
         return new AddressEndpointContext(identity.getPeerAddress(), peerIdentity);
     }
 
     /**
      * Extract "common name" from "distinguished name".
      * 
-     * @param dn distinguished name
-     * @return common name
+     * @param dn The distinguished name.
+     * @return The extracted common name.
      * @throws IllegalStateException if no CN is contained in DN.
      */
     public static String extractCN(String dn) {

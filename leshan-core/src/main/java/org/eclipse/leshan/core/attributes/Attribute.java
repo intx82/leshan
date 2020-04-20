@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2018 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -96,6 +96,15 @@ public class Attribute {
     private final AttributeModel model;
     private final Object value;
 
+    public Attribute(String coRELinkParam) {
+        Validate.notEmpty(coRELinkParam);
+        this.model = modelMap.get(coRELinkParam);
+        if (model == null) {
+            throw new IllegalArgumentException(String.format("Unsupported attribute '%s'", coRELinkParam));
+        }
+        this.value = null;
+    }
+
     public Attribute(String coRELinkParam, Object value) {
         Validate.notEmpty(coRELinkParam);
         this.model = modelMap.get(coRELinkParam);
@@ -103,10 +112,6 @@ public class Attribute {
             throw new IllegalArgumentException(String.format("Unsupported attribute '%s'", coRELinkParam));
         }
         this.value = ensureMatchingValue(model, value);
-    }
-
-    public static Attribute create(String coRELinkParam, Object value) {
-        return new Attribute(coRELinkParam, value);
     }
 
     /**

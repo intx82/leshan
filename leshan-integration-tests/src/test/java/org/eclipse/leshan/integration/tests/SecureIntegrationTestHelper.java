@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -39,12 +39,16 @@ import java.security.spec.ECPublicKeySpec;
 import java.security.spec.KeySpec;
 import java.util.List;
 
+import javax.crypto.SecretKey;
+
 import org.eclipse.californium.core.network.CoapEndpoint;
 import org.eclipse.californium.core.network.config.NetworkConfig;
 import org.eclipse.californium.core.observe.ObservationStore;
 import org.eclipse.californium.scandium.DTLSConnector;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig.Builder;
+import org.eclipse.californium.scandium.dtls.PskPublicInformation;
+import org.eclipse.californium.scandium.dtls.cipher.CipherSuite;
 import org.eclipse.leshan.LwM2mId;
 import org.eclipse.leshan.client.californium.LeshanClientBuilder;
 import org.eclipse.leshan.client.object.Device;
@@ -56,9 +60,9 @@ import org.eclipse.leshan.client.resource.ObjectsInitializer;
 import org.eclipse.leshan.core.californium.EndpointFactory;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.server.californium.LeshanServerBuilder;
-import org.eclipse.leshan.server.impl.InMemorySecurityStore;
 import org.eclipse.leshan.server.security.DefaultAuthorizer;
 import org.eclipse.leshan.server.security.EditableSecurityStore;
+import org.eclipse.leshan.server.security.InMemorySecurityStore;
 import org.eclipse.leshan.server.security.SecurityChecker;
 import org.eclipse.leshan.server.security.SecurityStore;
 import org.eclipse.leshan.util.Hex;
@@ -184,13 +188,22 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
     }
 
     public void createPSKClient() {
+        createPSKClient(false);
+    }
+
+    public void createPSKClientUsingQueueMode() {
+        createPSKClient(true);
+    }
+
+    public void createPSKClient(boolean queueMode) {
         ObjectsInitializer initializer = new ObjectsInitializer();
         initializer.setInstancesForObject(LwM2mId.SECURITY,
                 Security.psk(
                         "coaps://" + server.getSecuredAddress().getHostString() + ":"
                                 + server.getSecuredAddress().getPort(),
                         12345, GOOD_PSK_ID.getBytes(StandardCharsets.UTF_8), GOOD_PSK_KEY));
-        initializer.setInstancesForObject(LwM2mId.SERVER, new Server(12345, LIFETIME, BindingMode.U, false));
+        initializer.setInstancesForObject(LwM2mId.SERVER,
+                new Server(12345, LIFETIME, queueMode ? BindingMode.UQ : BindingMode.U, false));
         initializer.setInstancesForObject(LwM2mId.DEVICE, new Device("Eclipse Leshan", MODEL_NUMBER, "12345", "U"));
         initializer.setDummyInstancesForObject(LwM2mId.ACCESS_CONTROL);
         List<LwM2mObjectEnabler> objects = initializer.createAll();
@@ -199,6 +212,8 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
         LeshanClientBuilder builder = new LeshanClientBuilder(getCurrentEndpoint());
         builder.setLocalAddress(clientAddress.getHostString(), clientAddress.getPort());
         builder.setObjects(objects);
+        builder.setDtlsConfig(
+                new DtlsConnectorConfig.Builder().setSupportedCipherSuites(CipherSuite.TLS_PSK_WITH_AES_128_CCM_8));
 
         // set an editable PSK store for tests
         builder.setEndpointFactory(new EndpointFactory() {
@@ -218,8 +233,8 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
                 CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
                 Builder dtlsConfigBuilder = new Builder(dtlsConfig);
                 if (dtlsConfig.getPskStore() != null) {
-                    String identity = dtlsConfig.getPskStore().getIdentity(null);
-                    byte[] key = dtlsConfig.getPskStore().getKey(null);
+                    PskPublicInformation identity = dtlsConfig.getPskStore().getIdentity(null);
+                    SecretKey key = dtlsConfig.getPskStore().getKey(identity);
                     singlePSKStore = new SinglePSKStore(identity, key);
                     dtlsConfigBuilder.setPskStore(singlePSKStore);
                 }
@@ -257,6 +272,7 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
         builder.setLocalAddress(clientAddress.getHostString(), clientAddress.getPort());
         builder.setObjects(objects);
         client = builder.build();
+        setupClientMonitoring();
     }
 
     public void createRPKClient() {
@@ -295,6 +311,7 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
         builder.setLocalAddress(clientAddress.getHostString(), clientAddress.getPort());
         builder.setObjects(objects);
         client = builder.build();
+        setupClientMonitoring();
     }
 
     @Override
@@ -302,6 +319,10 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
         LeshanServerBuilder builder = super.createServerBuilder();
         securityStore = new InMemorySecurityStore();
         builder.setSecurityStore(securityStore);
+        Builder dtlsConfig = new DtlsConnectorConfig.Builder();
+        dtlsConfig.setMaxRetransmissions(1);
+        dtlsConfig.setRetransmissionTimeout(300);
+        builder.setDtlsConfig(dtlsConfig);
         return builder;
     }
 
@@ -347,9 +368,9 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
 
     @Override
     public void dispose() {
-        getSecurityStore().remove(getCurrentEndpoint());
-        getSecurityStore().remove(BAD_ENDPOINT);
-        getSecurityStore().remove(GOOD_ENDPOINT);
+        getSecurityStore().remove(getCurrentEndpoint(), false);
+        getSecurityStore().remove(BAD_ENDPOINT, false);
+        getSecurityStore().remove(GOOD_ENDPOINT, false);
         super.dispose();
     }
 }

@@ -2,11 +2,11 @@
  * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -14,6 +14,8 @@
  *     Sierra Wireless - initial API and implementation
  *******************************************************************************/
 package org.eclipse.leshan.integration.tests;
+
+import static org.junit.Assert.assertEquals;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -132,7 +134,7 @@ public class FailingTest {
         // Request should timedout in ~1s we don't send ACK
         callback.waitForResponse(1500);
         Assert.assertTrue("we should timeout", callback.getException() instanceof TimeoutException);
-
+        assertEquals(TimeoutException.Type.COAP_TIMEOUT, ((TimeoutException) callback.getException()).getType());
     }
 
     @Test
@@ -157,5 +159,6 @@ public class FailingTest {
         Assert.assertTrue("we should still wait for response", callback.getException() == null);
         callback.waitForResponse(2000);
         Assert.assertTrue("we should timeout", callback.getException() instanceof TimeoutException);
+        assertEquals(TimeoutException.Type.RESPONSE_TIMEOUT, ((TimeoutException) callback.getException()).getType());
     }
 }

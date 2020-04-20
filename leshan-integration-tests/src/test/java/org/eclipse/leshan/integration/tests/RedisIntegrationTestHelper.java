@@ -2,11 +2,11 @@
  * Copyright (c) 2016 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -20,13 +20,13 @@ import java.net.InetSocketAddress;
 
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.server.californium.LeshanServerBuilder;
-import org.eclipse.leshan.server.cluster.RedisRegistrationStore;
-import org.eclipse.leshan.server.impl.InMemorySecurityStore;
 import org.eclipse.leshan.server.model.StaticModelProvider;
+import org.eclipse.leshan.server.redis.RedisRegistrationStore;
+import org.eclipse.leshan.server.security.InMemorySecurityStore;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
-import redis.clients.util.Pool;
+import redis.clients.jedis.util.Pool;
 
 public class RedisIntegrationTestHelper extends IntegrationTestHelper {
     @Override

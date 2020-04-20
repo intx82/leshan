@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -87,11 +87,11 @@ myModule.factory('lwResources',["$http", function($http) {
     /**
      * Build Resource Tree for the given rootPath and objectLinks
      */
-    var buildResourceTree = function(rootPath, objectLinks, callback) {
+    var buildResourceTree = function(endpoint, rootPath, objectLinks, callback) {
         if (objectLinks.length == 0)
             callback([]);
 
-        getObjectDefinitions(function(objectDefs){
+        getObjectDefinitions(endpoint, function(objectDefs){
             var tree = [];
 
             for (var i = 0; i < objectLinks.length; i++) {
@@ -142,6 +142,61 @@ myModule.factory('lwResources',["$http", function($http) {
     };
 
     /**
+     * Update Resource Tree for the given rootPath and objectLinks
+     */
+    var updateResourceTree = function(endpoint, tree, rootPath, objectLinks, callback) {
+        if (objectLinks.length == 0)
+            callback([]);
+
+        getObjectDefinitions(endpoint, function(objectDefs){
+
+            // add missing
+            for (var i = 0; i < objectLinks.length; i++) {
+
+                // remove root path from link
+                var link = objectLinks[i].url;
+                if(link.indexOf(rootPath) == 0) {
+                    link.slice(rootPath.length);
+                }
+
+                // get list of resources (e.g. : [3] or [1,123]
+                var resourcepath = url2array(link);
+                var attributes = objectLinks[i].attributes;
+
+                switch (resourcepath.length) {
+                case 0:
+                    // ignore empty path
+                    break;
+                case 1:
+                    // object
+                    var object = addObject(tree, objectDefs, resourcepath[0],
+                            attributes);
+                    break;
+                case 2:
+                    // instance
+                    var object = addObject(tree, objectDefs, resourcepath[0], null);
+                    addInstance(object, resourcepath[1], attributes);
+
+                    break;
+                }
+            }
+
+            // remove extra object instances
+            result = tree.filter(function (object) {
+                // remove extra instances
+                object.instances = object.instances.filter(instance => objectLinks.find(link => link.url.startsWith(rootPath+object.id+"/"+instance.id)));
+                // filter object
+                return objectLinks.find(link => link.url.startsWith(rootPath+object.id));
+            });
+
+            // sort object
+            result.sort(function(o1,o2){return o1.id - o2.id});
+
+            callback(result);
+        });
+    };
+
+    /**
      * add object with the given ID to resource tree if necessary and return it
      */
     var addObject = function(tree, objectDefs, objectId, attributes) {
@@ -156,6 +211,7 @@ myModule.factory('lwResources',["$http", function($http) {
             if (object == undefined) {
                 object = {
                     name : "Object " + objectId,
+                    unknown : true,
                     id : objectId,
                     instancetype : "multiple",
                     resourcedefs : []
@@ -225,7 +281,9 @@ myModule.factory('lwResources',["$http", function($http) {
                 var resourcedef = {
                     name : "Resource " + resourceId,
                     id : resourceId,
-                    operations : "RW"
+                    unknown : true,
+                    operations : "RW",
+                    type : "opaque"
                 };
                 object.resourcedefs.push(resourcedef);
             }
@@ -267,36 +325,33 @@ myModule.factory('lwResources',["$http", function($http) {
     /**
      * Load all the Object Definition known by the server.
      */
-    var loadObjectDefinitions = function(callback) {
-        if (objectDefs){
-            callback(objectDefs);
-        }else{
-            $http.get("api/objectspecs")
-            .success(function(data, status, headers, config) {
-                if (data) {
-                    objectDefs = data;
-                    callback(objectDefs);
-                }else{
-                    callback([]);
-                }
-            }).error(function(data, status, headers, config) {
-                errormessage = "Unable to load object specfication : " + status +" "+ data;
-                console.error(errormessage);
+    var loadObjectDefinitions = function(endpoint, callback) {
+        $http.get("api/objectspecs/"+endpoint)
+        .success(function(data, status, headers, config) {
+            if (data) {
+                objectDefs = data;
+                callback(objectDefs);
+            }else{
                 callback([]);
-            });
-        }
+            }
+        }).error(function(data, status, headers, config) {
+            errormessage = "Unable to load object specfication : " + status +" "+ data;
+            console.error(errormessage);
+            callback([]);
+        });
     };
 
     /**
      * Return a copy of model describing the LWM2M Objects defined by OMA
      */
-    var getObjectDefinitions = function(callback) {
-        loadObjectDefinitions(function(objectDefs){
+    var getObjectDefinitions = function(endpoint,callback) {
+        loadObjectDefinitions(endpoint, function(objectDefs){
             callback($.extend(true,[],objectDefs)); // make a deep copy of the cache
         });
     };
 
     serviceInstance.buildResourceTree = buildResourceTree;
+    serviceInstance.updateResourceTree = updateResourceTree;
     serviceInstance.findResource = findResource;
     serviceInstance.findInstance = findInstance;
     serviceInstance.addInstance = addInstance;

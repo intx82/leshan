@@ -2,11 +2,11 @@
  * Copyright (c) 2018 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -55,12 +55,21 @@ public class SecurityUtil {
         public X509Certificate decode(InputStream inputStream) throws CertificateException {
             CertificateFactory cf = CertificateFactory.getInstance("X.509");
             Certificate certificate = cf.generateCertificate(inputStream);
-            if (certificate instanceof X509Certificate) {
+
+            // we support only EC algorithm
+            if (!"EC".equals(certificate.getPublicKey().getAlgorithm())) {
+                throw new CertificateException(String.format(
+                        "%s algorithm is not supported, Only EC algorithm is supported", certificate.getType()));
+            }
+
+            // we support only X509 certificate
+            if (!(certificate instanceof X509Certificate)) {
+                throw new CertificateException(
+                        String.format("%s certificate format is not supported, Only X.509 certificate is supported",
+                                certificate.getType()));
+            } else {
                 return (X509Certificate) certificate;
             }
-            throw new CertificateException(
-                    String.format("%s certificate format is not supported, Only X.509 certificate is supported",
-                            certificate.getType()));
         }
     };
 }

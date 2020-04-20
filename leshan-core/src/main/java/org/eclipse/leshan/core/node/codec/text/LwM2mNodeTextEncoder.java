@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -30,6 +30,7 @@ import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.node.ObjectLink;
 import org.eclipse.leshan.core.node.codec.CodecException;
 import org.eclipse.leshan.core.node.codec.LwM2mValueConverter;
+import org.eclipse.leshan.util.Base64;
 import org.eclipse.leshan.util.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,6 +100,10 @@ public class LwM2mNodeTextEncoder {
             case OBJLNK:
                 ObjectLink objlnk = (ObjectLink) val;
                 strValue = String.valueOf(objlnk.getObjectId() + ":" + objlnk.getObjectInstanceId());
+                break;
+            case OPAQUE:
+                byte[] binaryValue = (byte[]) val;
+                strValue = Base64.encodeBase64String(binaryValue);
                 break;
             default:
                 throw new CodecException("Cannot encode %s in text format for %s", val, path);

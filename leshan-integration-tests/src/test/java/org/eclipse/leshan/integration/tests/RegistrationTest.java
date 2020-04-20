@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -18,6 +18,7 @@
 package org.eclipse.leshan.integration.tests;
 
 import static org.eclipse.leshan.integration.tests.IntegrationTestHelper.LIFETIME;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.*;
@@ -37,10 +38,6 @@ import org.eclipse.californium.core.network.CoapEndpoint;
 import org.eclipse.californium.elements.AddressEndpointContext;
 import org.eclipse.leshan.Link;
 import org.eclipse.leshan.ResponseCode;
-import org.eclipse.leshan.client.californium.LeshanClientBuilder;
-import org.eclipse.leshan.client.resource.LwM2mInstanceEnabler;
-import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
-import org.eclipse.leshan.client.resource.ObjectEnabler;
 import org.eclipse.leshan.core.node.LwM2mPath;
 import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.request.ContentFormat;
@@ -85,7 +82,7 @@ public class RegistrationTest {
 
         // Check client is well registered
         helper.assertClientRegisterered();
-        assertArrayEquals(Link.parse("</>;rt=\"oma.lwm2m\",</1/0>,</2>,</3/0>,</2000/0>".getBytes()),
+        assertArrayEquals(Link.parse("</>;rt=\"oma.lwm2m\",</1/0>,</2>,</3/0>,</2000/0>,</2000/1>".getBytes()),
                 helper.getCurrentRegistration().getObjectLinks());
 
         // Check for update
@@ -109,7 +106,7 @@ public class RegistrationTest {
 
         // Check client is well registered
         helper.assertClientRegisterered();
-        assertArrayEquals(Link.parse("</>;rt=\"oma.lwm2m\",</1/0>,</2>,</3/0>,</2000/0>".getBytes()),
+        assertArrayEquals(Link.parse("</>;rt=\"oma.lwm2m\",</1/0>,</2>,</3/0>,</2000/0>,</2000/1>".getBytes()),
                 helper.getCurrentRegistration().getObjectLinks());
 
         // Stop client with out de-registration
@@ -239,19 +236,6 @@ public class RegistrationTest {
         fail("Observe request should be sent");
     }
 
-    // TODO not really a registration test
-    @Test(expected = IllegalArgumentException.class)
-    public void fail_to_create_client_with_same_object_twice() {
-        ObjectEnabler objectEnabler = new ObjectEnabler(1, null, new HashMap<Integer, LwM2mInstanceEnabler>(), null,
-                ContentFormat.DEFAULT);
-        ObjectEnabler objectEnabler2 = new ObjectEnabler(1, null, new HashMap<Integer, LwM2mInstanceEnabler>(), null,
-                ContentFormat.DEFAULT);
-        ArrayList<LwM2mObjectEnabler> objects = new ArrayList<>();
-        objects.add(objectEnabler);
-        objects.add(objectEnabler2);
-        helper.client = new LeshanClientBuilder("test").setObjects(objects).build();
-    }
-
     @Test
     public void register_with_additional_attributes() throws InterruptedException {
         // Create client with additional attributes
@@ -271,7 +255,7 @@ public class RegistrationTest {
         helper.assertClientRegisterered();
         assertNotNull(helper.getLastRegistration());
         assertEquals(additionalAttributes, helper.getLastRegistration().getAdditionalRegistrationAttributes());
-        assertArrayEquals(Link.parse("</>;rt=\"oma.lwm2m\",</1/0>,</2>,</3/0>,</2000/0>".getBytes()),
+        assertArrayEquals(Link.parse("</>;rt=\"oma.lwm2m\",</1/0>,</2>,</3/0>,</2000/0>,</2000/1>".getBytes()),
                 helper.getCurrentRegistration().getObjectLinks());
     }
 

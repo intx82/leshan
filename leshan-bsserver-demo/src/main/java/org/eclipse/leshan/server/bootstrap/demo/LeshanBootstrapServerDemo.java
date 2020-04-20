@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -32,7 +32,6 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.eclipse.californium.core.network.config.NetworkConfig;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
-import org.eclipse.californium.scandium.config.DtlsConnectorConfig.Builder;
 import org.eclipse.californium.scandium.dtls.CertificateMessage;
 import org.eclipse.californium.scandium.dtls.DTLSSession;
 import org.eclipse.californium.scandium.dtls.HandshakeException;
@@ -41,14 +40,14 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.webapp.WebAppContext;
 import org.eclipse.leshan.LwM2m;
-import org.eclipse.leshan.core.model.LwM2mModel;
 import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
+import org.eclipse.leshan.core.model.StaticModel;
 import org.eclipse.leshan.server.bootstrap.demo.servlet.BootstrapServlet;
 import org.eclipse.leshan.server.bootstrap.demo.servlet.ServerServlet;
-import org.eclipse.leshan.server.californium.LeshanBootstrapServerBuilder;
 import org.eclipse.leshan.server.californium.LeshanServerBuilder;
-import org.eclipse.leshan.server.californium.impl.LeshanBootstrapServer;
+import org.eclipse.leshan.server.californium.bootstrap.LeshanBootstrapServer;
+import org.eclipse.leshan.server.californium.bootstrap.LeshanBootstrapServerBuilder;
 import org.eclipse.leshan.util.SecurityUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,7 +81,8 @@ public class LeshanBootstrapServerDemo {
         options.addOption("wp", "webport", true, "Set the HTTP port for web server.\nDefault: 8080.");
         options.addOption("m", "modelsfolder", true, "A folder which contains object models in OMA DDF(.xml) format.");
         options.addOption("cfg", "configfile", true,
-                "Set the filename for the configuration.\nDefault: " + BootstrapStoreImpl.DEFAULT_FILE + ".");
+                "Set the filename for the configuration.\nDefault: " + JSONFileBootstrapStore.DEFAULT_FILE + ".");
+        options.addOption("oc", "activate support of old/deprecated cipher suites.");
         HelpFormatter formatter = new HelpFormatter();
         formatter.setOptionComparator(null);
 
@@ -143,12 +143,12 @@ public class LeshanBootstrapServerDemo {
         // Get config file
         String configFilename = cl.getOptionValue("cfg");
         if (configFilename == null) {
-            configFilename = BootstrapStoreImpl.DEFAULT_FILE;
+            configFilename = JSONFileBootstrapStore.DEFAULT_FILE;
         }
 
         try {
             createAndStartServer(webAddress, webPort, localAddress, localPort, secureLocalAddress, secureLocalPort,
-                    modelsFolderPath, configFilename);
+                    modelsFolderPath, configFilename, cl.hasOption("oc"));
         } catch (BindException e) {
             System.err.println(String
                     .format("Web port %s is already in use, you can change it using the 'webport' option.", webPort));
@@ -159,8 +159,8 @@ public class LeshanBootstrapServerDemo {
     }
 
     public static void createAndStartServer(String webAddress, int webPort, String localAddress, int localPort,
-            String secureLocalAddress, int secureLocalPort, String modelsFolderPath, String configFilename)
-            throws Exception {
+            String secureLocalAddress, int secureLocalPort, String modelsFolderPath, String configFilename,
+            boolean supportDeprecatedCiphers) throws Exception {
         // Create Models
         List<ObjectModel> models = ObjectLoader.loadDefault();
         if (modelsFolderPath != null) {
@@ -169,12 +169,16 @@ public class LeshanBootstrapServerDemo {
 
         // Prepare and start bootstrap server
         LeshanBootstrapServerBuilder builder = new LeshanBootstrapServerBuilder();
-        BootstrapStoreImpl bsStore = new BootstrapStoreImpl(configFilename);
+        JSONFileBootstrapStore bsStore = new JSONFileBootstrapStore(configFilename);
         builder.setConfigStore(bsStore);
-        builder.setSecurityStore(new BootstrapSecurityStoreImpl(bsStore));
+        builder.setSecurityStore(new BootstrapConfigSecurityStore(bsStore));
         builder.setLocalAddress(localAddress, localPort);
         builder.setLocalSecureAddress(secureLocalAddress, secureLocalPort);
-        builder.setModel(new LwM2mModel(models));
+        builder.setModel(new StaticModel(models));
+
+        // Create DTLS Config
+        DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
+        dtlsConfig.setRecommendedCipherSuitesOnly(!supportDeprecatedCiphers);
 
         // Create X509 credentials;
         X509Certificate serverCertificate = null;
@@ -185,8 +189,7 @@ public class LeshanBootstrapServerDemo {
             builder.setCertificateChain(new X509Certificate[] { serverCertificate });
 
             // Use a certificate verifier which trust all certificates by default.
-            Builder dtlsConfigBuilder = new DtlsConnectorConfig.Builder();
-            dtlsConfigBuilder.setCertificateVerifier(new CertificateVerifier() {
+            dtlsConfig.setCertificateVerifier(new CertificateVerifier() {
                 @Override
                 public void verifyCertificate(CertificateMessage message, DTLSSession session)
                         throws HandshakeException {
@@ -198,12 +201,13 @@ public class LeshanBootstrapServerDemo {
                     return null;
                 }
             });
-            builder.setDtlsConfig(dtlsConfigBuilder);
-
         } catch (Exception e) {
             LOG.error("Unable to load embedded X.509 certificate.", e);
             System.exit(-1);
         }
+
+        // Set DTLS Config
+        builder.setDtlsConfig(dtlsConfig);
 
         // Create CoAP Config
         NetworkConfig coapConfig;

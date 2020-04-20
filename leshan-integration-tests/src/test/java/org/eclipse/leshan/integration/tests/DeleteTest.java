@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -19,17 +19,15 @@
 
 package org.eclipse.leshan.integration.tests;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.*;
-
-import java.util.Arrays;
 
 import org.eclipse.californium.core.coap.Request;
 import org.eclipse.californium.core.coap.Response;
 import org.eclipse.leshan.ResponseCode;
 import org.eclipse.leshan.core.node.LwM2mObjectInstance;
-import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.node.LwM2mSingleResource;
 import org.eclipse.leshan.core.request.CreateRequest;
 import org.eclipse.leshan.core.request.DeleteRequest;
@@ -62,8 +60,8 @@ public class DeleteTest {
     @Test
     public void delete_created_object_instance() throws InterruptedException {
         // create ACL instance
-        helper.server.send(helper.getCurrentRegistration(), new CreateRequest(2, new LwM2mObjectInstance(0,
-                Arrays.asList(new LwM2mResource[] { LwM2mSingleResource.newIntegerResource(0, 123) }))));
+        helper.server.send(helper.getCurrentRegistration(),
+                new CreateRequest(2, new LwM2mObjectInstance(0, LwM2mSingleResource.newIntegerResource(3, 33))));
 
         // try to delete this instance
         DeleteResponse response = helper.server.send(helper.getCurrentRegistration(), new DeleteRequest(2, 0));
@@ -77,8 +75,8 @@ public class DeleteTest {
     @Test
     public void cannot_delete_resource() throws InterruptedException {
         // create ACL instance
-        helper.server.send(helper.getCurrentRegistration(), new CreateRequest(2, new LwM2mObjectInstance(0,
-                Arrays.asList(new LwM2mResource[] { LwM2mSingleResource.newIntegerResource(0, 123) }))));
+        helper.server.send(helper.getCurrentRegistration(),
+                new CreateRequest(2, new LwM2mObjectInstance(0, LwM2mSingleResource.newIntegerResource(0, 123))));
 
         // try to delete this resource using coap API as lwm2m API does not allow it.
         Request delete = Request.newDelete();

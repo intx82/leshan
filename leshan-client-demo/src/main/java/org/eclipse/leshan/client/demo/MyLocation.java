@@ -45,7 +45,7 @@ public class MyLocation extends BaseInstanceEnabler {
 
     @Override
     public ReadResponse read(ServerIdentity identity, int resourceid) {
-        LOG.info("Read on Location Resource " + resourceid);
+        LOG.info("Read on Location resource /{}/{}/{}", getModel().id, getId(), resourceid);
         switch (resourceid) {
         case 0:
             return ReadResponse.success(resourceid, getLatitude());
@@ -62,15 +62,19 @@ public class MyLocation extends BaseInstanceEnabler {
         switch (nextMove.charAt(0)) {
         case 'w':
             moveLatitude(1.0f);
+            LOG.info("Move to North {}/{}", getLatitude(), getLongitude());
             break;
         case 'a':
             moveLongitude(-1.0f);
+            LOG.info("Move to East {}/{}", getLatitude(), getLongitude());
             break;
         case 's':
             moveLatitude(-1.0f);
+            LOG.info("Move to South {}/{}", getLatitude(), getLongitude());
             break;
         case 'd':
             moveLongitude(1.0f);
+            LOG.info("Move to West {}/{}", getLatitude(), getLongitude());
             break;
         }
     }

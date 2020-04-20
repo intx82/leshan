@@ -2,11 +2,11 @@
  * Copyright (c) 2018 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -21,10 +21,14 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.leshan.ResponseCode;
-import org.eclipse.leshan.client.observer.LwM2mClientObserver;
+import org.eclipse.leshan.client.observer.LwM2mClientObserverAdapter;
 import org.eclipse.leshan.client.servers.Server;
+import org.eclipse.leshan.core.request.BootstrapRequest;
+import org.eclipse.leshan.core.request.DeregisterRequest;
+import org.eclipse.leshan.core.request.RegisterRequest;
+import org.eclipse.leshan.core.request.UpdateRequest;
 
-public class SynchronousClientObserver implements LwM2mClientObserver {
+public class SynchronousClientObserver extends LwM2mClientObserverAdapter {
 
     private CountDownLatch registerLatch = new CountDownLatch(1);
     private AtomicBoolean registerSucceed = new AtomicBoolean(false);
@@ -43,70 +47,74 @@ public class SynchronousClientObserver implements LwM2mClientObserver {
     private AtomicBoolean bootstrapFailed = new AtomicBoolean(false);
 
     @Override
-    public void onBootstrapSuccess(Server bsserver) {
+    public void onBootstrapSuccess(Server bsserver, BootstrapRequest request) {
         bootstrapSucceed.set(true);
         bootstrapLatch.countDown();
     }
 
     @Override
-    public void onBootstrapFailure(Server bsserver, ResponseCode responseCode, String errorMessage) {
+    public void onBootstrapFailure(Server bsserver, BootstrapRequest request, ResponseCode responseCode,
+            String errorMessage, Exception cause) {
         bootstrapFailed.set(true);
         bootstrapLatch.countDown();
     }
 
     @Override
-    public void onBootstrapTimeout(Server bsserver) {
+    public void onBootstrapTimeout(Server bsserver, BootstrapRequest request) {
         bootstrapLatch.countDown();
     }
 
     @Override
-    public void onRegistrationSuccess(Server server, String registrationID) {
+    public void onRegistrationSuccess(Server server, RegisterRequest request, String registrationID) {
         registerSucceed.set(true);
         registerLatch.countDown();
     }
 
     @Override
-    public void onRegistrationFailure(Server server, ResponseCode responseCode, String errorMessage) {
+    public void onRegistrationFailure(Server server, RegisterRequest request, ResponseCode responseCode,
+            String errorMessage, Exception cause) {
         registerFailed.set(true);
         registerLatch.countDown();
     }
 
     @Override
-    public void onRegistrationTimeout(Server server) {
+    public void onRegistrationTimeout(Server server, RegisterRequest request) {
         registerLatch.countDown();
     }
 
     @Override
-    public void onUpdateSuccess(Server server, String registrationID) {
+    public void onUpdateSuccess(Server server, UpdateRequest request) {
         updateSucceed.set(true);
         updateLatch.countDown();
     }
 
     @Override
-    public void onUpdateFailure(Server server, ResponseCode responseCode, String errorMessage) {
+    public void onUpdateFailure(Server server, UpdateRequest request, ResponseCode responseCode, String errorMessage,
+            Exception cause) {
         updateFailed.set(true);
         updateLatch.countDown();
     }
 
     @Override
-    public void onUpdateTimeout(Server server) {
+    public void onUpdateTimeout(Server server, UpdateRequest request) {
         updateLatch.countDown();
     }
 
     @Override
-    public void onDeregistrationSuccess(Server server, String registrationID) {
+    public void onDeregistrationSuccess(Server server, DeregisterRequest request) {
         deregisterSucceed.set(true);
         deregisterLatch.countDown();
     }
 
     @Override
-    public void onDeregistrationFailure(Server server, ResponseCode responseCode, String errorMessage) {
+    public void onDeregistrationFailure(Server server, DeregisterRequest request, ResponseCode responseCode,
+            String errorMessage, Exception cause) {
         deregisterFailed.set(true);
         deregisterLatch.countDown();
     }
 
     @Override
-    public void onDeregistrationTimeout(Server server) {
+    public void onDeregistrationTimeout(Server server, DeregisterRequest request) {
         deregisterLatch.countDown();
     }
 

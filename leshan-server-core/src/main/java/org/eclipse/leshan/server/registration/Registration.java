@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -25,8 +25,13 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.leshan.Link;
+import org.eclipse.leshan.core.attributes.Attribute;
+import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.request.Identity;
 import org.eclipse.leshan.util.StringUtils;
@@ -47,11 +52,6 @@ public class Registration implements Serializable {
 
     private final Identity identity;
 
-    /*
-     * The address of the LWM2M Server's CoAP end point the client used to register.
-     */
-    private final InetSocketAddress registrationEndpointAddress;
-
     private final long lifeTimeInSec;
 
     private final String smsNumber;
@@ -69,6 +69,10 @@ public class Registration implements Serializable {
 
     private final Link[] objectLinks;
 
+    // Lazy Loaded map of supported object (object id => version)
+    // built from objectLinks
+    private final AtomicReference<Map<Integer, String>> supportedObjects;
+
     private final Map<String, String> additionalRegistrationAttributes;
 
     /** The location where LWM2M objects are hosted on the device */
@@ -77,35 +81,33 @@ public class Registration implements Serializable {
     private final Date lastUpdate;
 
     protected Registration(String id, String endpoint, Identity identity, String lwM2mVersion, Long lifetimeInSec,
-            String smsNumber, BindingMode bindingMode, Link[] objectLinks,
-            InetSocketAddress registrationEndpointAddress,
-
-            Date registrationDate, Date lastUpdate, Map<String, String> additionalRegistrationAttributes) {
+            String smsNumber, BindingMode bindingMode, Link[] objectLinks, Date registrationDate, Date lastUpdate,
+            Map<String, String> additionalRegistrationAttributes, Map<Integer, String> supportedObjects) {
 
         Validate.notNull(id);
         Validate.notEmpty(endpoint);
         Validate.notNull(identity);
-        Validate.notNull(registrationEndpointAddress);
 
         this.id = id;
         this.identity = identity;
         this.endpoint = endpoint;
         this.smsNumber = smsNumber;
-        this.registrationEndpointAddress = registrationEndpointAddress;
 
         this.objectLinks = objectLinks;
-        // extract the root objects path from the object links
+        // Parse object link to extract root path.
         String rootPath = "/";
         if (objectLinks != null) {
             for (Link link : objectLinks) {
-                if (link != null && "oma.lwm2m".equals(link.getAttributes().get("rt"))) {
+                if (link != null && "oma.lwm2m".equals(Link.unquote(link.getAttributes().get("rt")))) {
                     rootPath = link.getUrl();
                     break;
                 }
             }
         }
+        if (!rootPath.endsWith("/"))
+            rootPath = rootPath + "/";
         this.rootPath = rootPath;
-
+        this.supportedObjects = new AtomicReference<Map<Integer, String>>(supportedObjects);
         this.lifeTimeInSec = lifetimeInSec == null ? DEFAULT_LIFETIME_IN_SEC : lifetimeInSec;
         this.lwM2mVersion = lwM2mVersion == null ? DEFAULT_LWM2M_VERSION : lwM2mVersion;
         this.bindingMode = bindingMode == null ? BindingMode.U : bindingMode;
@@ -163,23 +165,6 @@ public class Registration implements Serializable {
      */
     public int getPort() {
         return identity.getPeerAddress().getPort();
-    }
-
-    /**
-     * Gets the network address and port number of LWM2M Server's CoAP endpoint the client originally registered at.
-     * 
-     * A LWM2M Server may listen on multiple CoAP end points, e.g. a non-secure and a secure one. Clients are often
-     * behind a firewall which will only let incoming UDP packets pass if they originate from the same address:port that
-     * the client has initiated communication with, e.g. by means of registering with the LWM2M Server. It is therefore
-     * important to know, which of the server's CoAP end points the client contacted for registration.
-     * 
-     * This information can be used to uniquely identify the CoAP endpoint that should be used to access resources on
-     * the client.
-     * 
-     * @return the network address and port number
-     */
-    public InetSocketAddress getRegistrationEndpointAddress() {
-        return registrationEndpointAddress;
     }
 
     public Link[] getObjectLinks() {
@@ -282,6 +267,15 @@ public class Registration implements Serializable {
     }
 
     /**
+     * @return True if DTLS handshake can be initiated by the Server for this registration.
+     */
+    public boolean canInitiateConnection() {
+        // We consider that initiates a connection (acting as DTLS client to initiate a handshake) does not make sense
+        // for QueueMode as if we lost connection device is probably absent.
+        return !bindingMode.useQueueMode() && bindingMode.useUDP();
+    }
+
+    /**
      * @return true if the last registration update was done less than lifetime seconds ago.
      */
     public boolean isAlive() {
@@ -302,15 +296,35 @@ public class Registration implements Serializable {
     }
 
     public boolean usesQueueMode() {
-        return bindingMode.equals(BindingMode.UQ) || bindingMode.equals(BindingMode.UQS);
+        return bindingMode.useQueueMode() && bindingMode.useUDP();
+    }
+
+    /**
+     * @return the supported version of the object with the id {@code objectid}. If the object is not supported return
+     *         {@code null}
+     */
+    public String getSupportedVersion(Integer objectid) {
+        return getSupportedObject().get(objectid);
+    }
+
+    /**
+     * @return a map from {@code objectId} => {@code supportedVersion} for each supported objects. supported.
+     */
+    public Map<Integer, String> getSupportedObject() {
+        Map<Integer, String> objects = supportedObjects.get();
+        if (objects != null)
+            return objects;
+
+        supportedObjects.compareAndSet(null, Collections.unmodifiableMap(getSupportedObject(rootPath, objectLinks)));
+        return supportedObjects.get();
     }
 
     @Override
     public String toString() {
         return String.format(
-                "Registration [registrationDate=%s, identity=%s, registrationEndpoint=%s, lifeTimeInSec=%s, smsNumber=%s, lwM2mVersion=%s, bindingMode=%s, endpoint=%s, registrationId=%s, objectLinks=%s, lastUpdate=%s]",
-                registrationDate, identity, registrationEndpointAddress, lifeTimeInSec, smsNumber, lwM2mVersion,
-                bindingMode, endpoint, id, Arrays.toString(objectLinks), lastUpdate);
+                "Registration [registrationDate=%s, identity=%s, lifeTimeInSec=%s, smsNumber=%s, lwM2mVersion=%s, bindingMode=%s, endpoint=%s, registrationId=%s, objectLinks=%s, lastUpdate=%s]",
+                registrationDate, identity, lifeTimeInSec, smsNumber, lwM2mVersion, bindingMode, endpoint, id,
+                Arrays.toString(objectLinks), lastUpdate);
     }
 
     /**
@@ -339,11 +353,52 @@ public class Registration implements Serializable {
         }
     }
 
+    /**
+     * Build a Map (object Id => object Version) from root path and registration object links.
+     */
+    public static Map<Integer, String> getSupportedObject(String rootPath, Link[] objectLinks) {
+        Map<Integer, String> objects = new HashMap<>();
+        for (Link link : objectLinks) {
+            if (link != null) {
+                Pattern p = Pattern.compile("^\\Q" + rootPath + "\\E(\\d+)(?:/\\d+)*$");
+                Matcher m = p.matcher(link.getUrl());
+                if (m.matches()) {
+                    try {
+                        // extract object id and version
+                        int objectId = Integer.parseInt(m.group(1));
+                        String version = link.getAttributes().get(Attribute.OBJECT_VERSION);
+                        // un-quote version (see https://github.com/eclipse/leshan/issues/732)
+                        version = Link.unquote(version);
+                        String currentVersion = objects.get(objectId);
+
+                        // store it in map
+                        if (currentVersion == null) {
+                            // we never find version for this object add it
+                            if (version != null) {
+                                objects.put(objectId, version);
+                            } else {
+                                objects.put(objectId, ObjectModel.DEFAULT_VERSION);
+                            }
+                        } else {
+                            // if version is already set, we override it only if new version is not DEFAULT_VERSION
+                            if (version != null && !version.equals(ObjectModel.DEFAULT_VERSION)) {
+                                objects.put(objectId, version);
+                            }
+                        }
+                    } catch (NumberFormatException e) {
+                        // This should not happened except maybe if the number in url is too long...
+                        // In this case we just ignore it because this is not an object id.
+                    }
+                }
+            }
+        }
+        return objects;
+    }
+
     public static class Builder {
         private final String registrationId;
         private final String endpoint;
         private final Identity identity;
-        private final InetSocketAddress registrationEndpointAddress;
 
         private Date registrationDate;
         private Date lastUpdate;
@@ -352,20 +407,17 @@ public class Registration implements Serializable {
         private BindingMode bindingMode;
         private String lwM2mVersion;
         private Link[] objectLinks;
+        private Map<Integer, String> supportedObjects;
         private Map<String, String> additionalRegistrationAttributes;
 
-        public Builder(String registrationId, String endpoint, Identity identity,
-                InetSocketAddress registrationEndpointAddress) {
+        public Builder(String registrationId, String endpoint, Identity identity) {
 
             Validate.notNull(registrationId);
             Validate.notEmpty(endpoint);
             Validate.notNull(identity);
-            Validate.notNull(registrationEndpointAddress);
             this.registrationId = registrationId;
             this.endpoint = endpoint;
             this.identity = identity;
-            this.registrationEndpointAddress = registrationEndpointAddress;
-
         }
 
         public Builder registrationDate(Date registrationDate) {
@@ -403,6 +455,11 @@ public class Registration implements Serializable {
             return this;
         }
 
+        public Builder supportedObjects(Map<Integer, String> supportedObjects) {
+            this.supportedObjects = Collections.unmodifiableMap(supportedObjects);
+            return this;
+        }
+
         public Builder additionalRegistrationAttributes(Map<String, String> additionalRegistrationAttributes) {
             this.additionalRegistrationAttributes = additionalRegistrationAttributes;
             return this;
@@ -411,10 +468,9 @@ public class Registration implements Serializable {
         public Registration build() {
             return new Registration(Builder.this.registrationId, Builder.this.endpoint, Builder.this.identity,
                     Builder.this.lwM2mVersion, Builder.this.lifeTimeInSec, Builder.this.smsNumber, this.bindingMode,
-                    this.objectLinks, this.registrationEndpointAddress, this.registrationDate, this.lastUpdate,
-                    this.additionalRegistrationAttributes);
+                    this.objectLinks, this.registrationDate, this.lastUpdate, this.additionalRegistrationAttributes,
+                    this.supportedObjects);
         }
 
     }
-
 }

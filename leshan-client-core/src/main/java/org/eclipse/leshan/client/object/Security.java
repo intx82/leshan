@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -137,12 +137,10 @@ public class Security extends BaseInstanceEnabler {
 
     @Override
     public WriteResponse write(ServerIdentity identity, int resourceId, LwM2mResource value) {
-        LOG.debug("Write on resource {}: {}", resourceId, value);
-
-        // restricted to BS server?
+        if (!identity.isSystem())
+            LOG.debug("Write on Security resource /{}/{}/{}", getModel().id, getId(), resourceId);
 
         switch (resourceId) {
-
         case SEC_SERVER_URI: // server uri
             if (value.getType() != Type.STRING) {
                 return WriteResponse.badRequest("invalid type");

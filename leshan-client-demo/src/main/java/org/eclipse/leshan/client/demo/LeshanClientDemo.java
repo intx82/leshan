@@ -2,11 +2,11 @@
  * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -30,24 +30,47 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Option.Builder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.eclipse.californium.core.network.config.NetworkConfig;
+import org.eclipse.californium.elements.Connector;
+import org.eclipse.californium.scandium.DTLSConnector;
+import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
+import org.eclipse.californium.scandium.dtls.ClientHandshaker;
+import org.eclipse.californium.scandium.dtls.DTLSSession;
+import org.eclipse.californium.scandium.dtls.HandshakeException;
+import org.eclipse.californium.scandium.dtls.Handshaker;
+import org.eclipse.californium.scandium.dtls.ResumingClientHandshaker;
+import org.eclipse.californium.scandium.dtls.ResumingServerHandshaker;
+import org.eclipse.californium.scandium.dtls.ServerHandshaker;
+import org.eclipse.californium.scandium.dtls.SessionAdapter;
 import org.eclipse.leshan.LwM2m;
 import org.eclipse.leshan.client.californium.LeshanClient;
 import org.eclipse.leshan.client.californium.LeshanClientBuilder;
+import org.eclipse.leshan.client.engine.DefaultRegistrationEngineFactory;
 import org.eclipse.leshan.client.object.Server;
 import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
 import org.eclipse.leshan.client.resource.ObjectsInitializer;
+import org.eclipse.leshan.client.resource.listener.ObjectsListenerAdapter;
+import org.eclipse.leshan.core.californium.DefaultEndpointFactory;
 import org.eclipse.leshan.core.model.LwM2mModel;
 import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.core.model.ObjectModel;
+import org.eclipse.leshan.core.model.StaticModel;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.util.Hex;
 import org.eclipse.leshan.util.SecurityUtil;
@@ -58,10 +81,37 @@ public class LeshanClientDemo {
 
     private static final Logger LOG = LoggerFactory.getLogger(LeshanClientDemo.class);
 
-    private final static String[] modelPaths = new String[] { "3303.xml" };
+    // /!\ This class is a COPY of org.eclipse.leshan.server.demo.LeshanServerDemo.modelPaths /!\
+    // TODO create a leshan-demo project ?
+    private final static String[] modelPaths = new String[] { "31024.xml",
+
+                            "10241.xml", "10242.xml", "10243.xml", "10244.xml", "10245.xml", "10246.xml", "10247.xml",
+                            "10248.xml", "10249.xml", "10250.xml",
+
+                            "2048.xml", "2049.xml", "2050.xml", "2051.xml", "2052.xml", "2053.xml", "2054.xml",
+                            "2055.xml", "2056.xml", "2057.xml",
+
+                            "3200.xml", "3201.xml", "3202.xml", "3203.xml", "3300.xml", "3301.xml", "3302.xml",
+                            "3303.xml", "3304.xml", "3305.xml", "3306.xml", "3308.xml", "3310.xml", "3311.xml",
+                            "3312.xml", "3313.xml", "3314.xml", "3315.xml", "3316.xml", "3317.xml", "3318.xml",
+                            "3319.xml", "3320.xml", "3321.xml", "3322.xml", "3323.xml", "3324.xml", "3325.xml",
+                            "3326.xml", "3327.xml", "3328.xml", "3329.xml", "3330.xml", "3331.xml", "3332.xml",
+                            "3333.xml", "3334.xml", "3335.xml", "3336.xml", "3337.xml", "3338.xml", "3339.xml",
+                            "3340.xml", "3341.xml", "3342.xml", "3343.xml", "3344.xml", "3345.xml", "3346.xml",
+                            "3347.xml", "3348.xml", "3349.xml", "3350.xml",
+
+                            "Communication_Characteristics-V1_0.xml",
+
+                            "LWM2M_Lock_and_Wipe-V1_0.xml", "LWM2M_Cellular_connectivity-v1_0.xml",
+                            "LWM2M_APN_connection_profile-v1_0.xml", "LWM2M_WLAN_connectivity4-v1_0.xml",
+                            "LWM2M_Bearer_selection-v1_0.xml", "LWM2M_Portfolio-v1_0.xml", "LWM2M_DevCapMgmt-v1_0.xml",
+                            "LWM2M_Software_Component-v1_0.xml", "LWM2M_Software_Management-v1_0.xml",
+
+                            "Non-Access_Stratum_NAS_configuration-V1_0.xml" };
 
     private static final int OBJECT_ID_TEMPERATURE_SENSOR = 3303;
     private final static String DEFAULT_ENDPOINT = "LeshanClientDemo";
+    private final static int DEFAULT_LIFETIME = 5 * 60; // 5min in seconds
     private final static String USAGE = "java -jar leshan-client-demo.jar [OPTION]\n\n";
 
     private static MyLocation locationInstance;
@@ -103,11 +153,24 @@ public class LeshanClientDemo {
         options.addOption("n", true, String.format(
                 "Set the endpoint name of the Client.\nDefault: the local hostname or '%s' if any.", DEFAULT_ENDPOINT));
         options.addOption("b", false, "If present use bootstrap.");
+        options.addOption("l", true, String.format(
+                "The lifetime in seconds used to register, ignored if -b is used.\n Default : %ds", DEFAULT_LIFETIME));
+        options.addOption("cp", true,
+                "The communication period in seconds which should be smaller than the lifeime, will be used even if -b is used.");
         options.addOption("lh", true, "Set the local CoAP address of the Client.\n  Default: any local address.");
         options.addOption("lp", true,
                 "Set the local CoAP port of the Client.\n  Default: A valid port value is between 0 and 65535.");
         options.addOption("u", true, String.format("Set the LWM2M or Bootstrap server URL.\nDefault: localhost:%d.",
                 LwM2m.DEFAULT_COAP_PORT));
+        options.addOption("r", false, "Force reconnect/rehandshake on update.");
+        options.addOption("f", false, "Do not try to resume session always, do a full handshake.");
+        options.addOption("ocf",
+                "activate support of old/unofficial content format .\n See https://github.com/eclipse/leshan/pull/720");
+        options.addOption("oc", "activate support of old/deprecated cipher suites.");
+        Builder aa = Option.builder("aa");
+        aa.desc("Use additional attributes at registration time, syntax is \n -aa attrName1=attrValue1 attrName2=\\\"attrValue2\\\" ...");
+        aa.hasArgs();
+        options.addOption(aa.build());
         options.addOption("pos", true,
                 "Set the initial location (latitude, longitude) of the device to be reported by the Location object.\n Format: lat_float:long_float");
         options.addOption("sf", true, "Scale factor to apply when shifting position.\n Default is 1.0." + PSKChapter);
@@ -203,6 +266,47 @@ public class LeshanClientDemo {
                 endpoint = InetAddress.getLocalHost().getHostName();
             } catch (UnknownHostException e) {
                 endpoint = DEFAULT_ENDPOINT;
+            }
+        }
+
+        // Get lifetime
+        int lifetime;
+        if (cl.hasOption("l")) {
+            lifetime = Integer.parseInt(cl.getOptionValue("l"));
+        } else {
+            lifetime = DEFAULT_LIFETIME;
+        }
+
+        // Get lifetime
+        Integer communicationPeriod = null;
+        if (cl.hasOption("cp")) {
+            communicationPeriod = Integer.valueOf(cl.getOptionValue("cp")) * 1000;
+        }
+
+        // Get additional attributes
+        Map<String, String> additionalAttributes = null;
+        if (cl.hasOption("aa")) {
+            additionalAttributes = new HashMap<>();
+            Pattern p1 = Pattern.compile("(.*)=\"(.*)\"");
+            Pattern p2 = Pattern.compile("(.*)=(.*)");
+            String[] values = cl.getOptionValues("aa");
+            for (String v : values) {
+                Matcher m = p1.matcher(v);
+                if (m.matches()) {
+                    String attrName = m.group(1);
+                    String attrValue = m.group(2);
+                    additionalAttributes.put(attrName, attrValue);
+                } else {
+                    m = p2.matcher(v);
+                    if (m.matches()) {
+                        String attrName = m.group(1);
+                        String attrValue = m.group(2);
+                        additionalAttributes.put(attrName, attrValue);
+                    } else {
+                        System.err.println(String.format("Invalid syntax for additional attributes : %s", v));
+                        return;
+                    }
+                }
             }
         }
 
@@ -302,9 +406,10 @@ public class LeshanClientDemo {
             }
         }
         try {
-            createAndStartClient(endpoint, localAddress, localPort, cl.hasOption("b"), serverURI, pskIdentity, pskKey,
-                    clientPrivateKey, clientPublicKey, serverPublicKey, clientCertificate, serverCertificate, latitude,
-                    longitude, scaleFactor);
+            createAndStartClient(endpoint, localAddress, localPort, cl.hasOption("b"), additionalAttributes, lifetime,
+                    communicationPeriod, serverURI, pskIdentity, pskKey, clientPrivateKey, clientPublicKey,
+                    serverPublicKey, clientCertificate, serverCertificate, latitude, longitude, scaleFactor,
+                    cl.hasOption("ocf"), cl.hasOption("oc"), cl.hasOption("r"), cl.hasOption("f"));
         } catch (Exception e) {
             System.err.println("Unable to create and start client ...");
             e.printStackTrace();
@@ -313,9 +418,12 @@ public class LeshanClientDemo {
     }
 
     public static void createAndStartClient(String endpoint, String localAddress, int localPort, boolean needBootstrap,
-            String serverURI, byte[] pskIdentity, byte[] pskKey, PrivateKey clientPrivateKey, PublicKey clientPublicKey,
+            Map<String, String> additionalAttributes, int lifetime, Integer communicationPeriod, String serverURI,
+            byte[] pskIdentity, byte[] pskKey, PrivateKey clientPrivateKey, PublicKey clientPublicKey,
             PublicKey serverPublicKey, X509Certificate clientCertificate, X509Certificate serverCertificate,
-            Float latitude, Float longitude, float scaleFactor) throws CertificateEncodingException {
+            Float latitude, Float longitude, float scaleFactor, boolean supportOldFormat,
+            boolean supportDeprecatedCiphers, boolean reconnectOnUpdate, boolean forceFullhandshake)
+            throws CertificateEncodingException {
 
         locationInstance = new MyLocation(latitude, longitude, scaleFactor);
 
@@ -324,7 +432,8 @@ public class LeshanClientDemo {
         models.addAll(ObjectLoader.loadDdfResources("/models", modelPaths));
 
         // Initialize object list
-        ObjectsInitializer initializer = new ObjectsInitializer(new LwM2mModel(models));
+        final LwM2mModel model = new StaticModel(models);
+        final ObjectsInitializer initializer = new ObjectsInitializer(model);
         if (needBootstrap) {
             if (pskIdentity != null) {
                 initializer.setInstancesForObject(SECURITY, pskBootstrap(serverURI, pskIdentity, pskKey));
@@ -336,7 +445,7 @@ public class LeshanClientDemo {
             } else if (clientCertificate != null) {
                 initializer.setInstancesForObject(SECURITY, x509Bootstrap(serverURI, clientCertificate.getEncoded(),
                         clientPrivateKey.getEncoded(), serverCertificate.getEncoded()));
-                initializer.setInstancesForObject(SERVER, new Server(123, 30, BindingMode.U, false));
+                initializer.setClassForObject(SERVER, Server.class);
             } else {
                 initializer.setInstancesForObject(SECURITY, noSecBootstap(serverURI));
                 initializer.setClassForObject(SERVER, Server.class);
@@ -344,18 +453,18 @@ public class LeshanClientDemo {
         } else {
             if (pskIdentity != null) {
                 initializer.setInstancesForObject(SECURITY, psk(serverURI, 123, pskIdentity, pskKey));
-                initializer.setInstancesForObject(SERVER, new Server(123, 30, BindingMode.U, false));
+                initializer.setInstancesForObject(SERVER, new Server(123, lifetime, BindingMode.U, false));
             } else if (clientPublicKey != null) {
                 initializer.setInstancesForObject(SECURITY, rpk(serverURI, 123, clientPublicKey.getEncoded(),
                         clientPrivateKey.getEncoded(), serverPublicKey.getEncoded()));
-                initializer.setInstancesForObject(SERVER, new Server(123, 30, BindingMode.U, false));
+                initializer.setInstancesForObject(SERVER, new Server(123, lifetime, BindingMode.U, false));
             } else if (clientCertificate != null) {
                 initializer.setInstancesForObject(SECURITY, x509(serverURI, 123, clientCertificate.getEncoded(),
                         clientPrivateKey.getEncoded(), serverCertificate.getEncoded()));
-                initializer.setInstancesForObject(SERVER, new Server(123, 30, BindingMode.U, false));
+                initializer.setInstancesForObject(SERVER, new Server(123, lifetime, BindingMode.U, false));
             } else {
                 initializer.setInstancesForObject(SECURITY, noSec(serverURI, 123));
-                initializer.setInstancesForObject(SERVER, new Server(123, 30, BindingMode.U, false));
+                initializer.setInstancesForObject(SERVER, new Server(123, lifetime, BindingMode.U, false));
             }
         }
         initializer.setInstancesForObject(DEVICE, new MyDevice());
@@ -374,12 +483,109 @@ public class LeshanClientDemo {
             coapConfig.store(configFile);
         }
 
+        // Create DTLS Config
+        DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
+        dtlsConfig.setRecommendedCipherSuitesOnly(!supportDeprecatedCiphers);
+
+        // Configure Registration Engine
+        DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
+        engineFactory.setCommunicationPeriod(communicationPeriod);
+        engineFactory.setReconnectOnUpdate(reconnectOnUpdate);
+        engineFactory.setResumeOnConnect(!forceFullhandshake);
+
+        // configure EndpointFactory
+        DefaultEndpointFactory endpointFactory = new DefaultEndpointFactory("LWM2M CLIENT") {
+            @Override
+            protected Connector createSecuredConnector(DtlsConnectorConfig dtlsConfig) {
+
+                return new DTLSConnector(dtlsConfig) {
+                    @Override
+                    protected void onInitializeHandshaker(Handshaker handshaker) {
+                        handshaker.addSessionListener(new SessionAdapter() {
+
+                            @Override
+                            public void handshakeStarted(Handshaker handshaker) throws HandshakeException {
+                                if (handshaker instanceof ServerHandshaker) {
+                                    LOG.info("DTLS Full Handshake initiated by server : STARTED ...");
+                                } else if (handshaker instanceof ResumingServerHandshaker) {
+                                    LOG.info("DTLS abbreviated Handshake initiated by server : STARTED ...");
+                                } else if (handshaker instanceof ClientHandshaker) {
+                                    LOG.info("DTLS Full Handshake initiated by client : STARTED ...");
+                                } else if (handshaker instanceof ResumingClientHandshaker) {
+                                    LOG.info("DTLS abbreviated Handshake initiated by client : STARTED ...");
+                                }
+                            }
+
+                            @Override
+                            public void sessionEstablished(Handshaker handshaker, DTLSSession establishedSession)
+                                    throws HandshakeException {
+                                if (handshaker instanceof ServerHandshaker) {
+                                    LOG.info("DTLS Full Handshake initiated by server : SUCCEED");
+                                } else if (handshaker instanceof ResumingServerHandshaker) {
+                                    LOG.info("DTLS abbreviated Handshake initiated by server : SUCCEED");
+                                } else if (handshaker instanceof ClientHandshaker) {
+                                    LOG.info("DTLS Full Handshake initiated by client : SUCCEED");
+                                } else if (handshaker instanceof ResumingClientHandshaker) {
+                                    LOG.info("DTLS abbreviated Handshake initiated by client : SUCCEED");
+                                }
+                            }
+
+                            @Override
+                            public void handshakeFailed(Handshaker handshaker, Throwable error) {
+                                // get cause
+                                String cause;
+                                if (error != null) {
+                                    if (error.getMessage() != null) {
+                                        cause = error.getMessage();
+                                    } else {
+                                        cause = error.getClass().getName();
+                                    }
+                                } else {
+                                    cause = "unknown cause";
+                                }
+
+                                if (handshaker instanceof ServerHandshaker) {
+                                    LOG.info("DTLS Full Handshake initiated by server : FAILED ({})", cause);
+                                } else if (handshaker instanceof ResumingServerHandshaker) {
+                                    LOG.info("DTLS abbreviated Handshake initiated by server : FAILED ({})", cause);
+                                } else if (handshaker instanceof ClientHandshaker) {
+                                    LOG.info("DTLS Full Handshake initiated by client : FAILED ({})", cause);
+                                } else if (handshaker instanceof ResumingClientHandshaker) {
+                                    LOG.info("DTLS abbreviated Handshake initiated by client : FAILED ({})", cause);
+                                }
+                            }
+                        });
+                    }
+                };
+            }
+        };
+
         // Create client
         LeshanClientBuilder builder = new LeshanClientBuilder(endpoint);
         builder.setLocalAddress(localAddress, localPort);
         builder.setObjects(enablers);
         builder.setCoapConfig(coapConfig);
+        builder.setDtlsConfig(dtlsConfig);
+        builder.setRegistrationEngineFactory(engineFactory);
+        builder.setEndpointFactory(endpointFactory);
+        if (supportOldFormat) {
+            builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
+            builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
+        }
+        builder.setAdditionalAttributes(additionalAttributes);
         final LeshanClient client = builder.build();
+
+        client.getObjectTree().addListener(new ObjectsListenerAdapter() {
+            @Override
+            public void objectRemoved(LwM2mObjectEnabler object) {
+                LOG.info("Object {} disabled.", object.getId());
+            }
+
+            @Override
+            public void objectAdded(LwM2mObjectEnabler object) {
+                LOG.info("Object {} enabled.", object.getId());
+            }
+        });
 
         // Display client public key to easily add it in demo servers.
         if (clientPublicKey != null) {
@@ -416,8 +622,25 @@ public class LeshanClientDemo {
                     Hex.encodeHexString(clientPrivateKey.getEncoded()));
         }
 
-        LOG.info("Press 'w','a','s','d' to change reported Location ({},{}).", locationInstance.getLatitude(),
-                locationInstance.getLongitude());
+        // Print commands help
+        StringBuilder commandsHelp = new StringBuilder("Commands available :");
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append("  - create <objectId> : to enable a new object.");
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append("  - delete <objectId> : to disable a new object.");
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append("  - update : to trigger a registration update.");
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append("  - w : to move to North.");
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append("  - a : to move to East.");
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append("  - s : to move to South.");
+        commandsHelp.append(System.lineSeparator());
+        commandsHelp.append("  - d : to move to West.");
+        commandsHelp.append(System.lineSeparator());
+        LOG.info(commandsHelp.toString());
 
         // Start the client
         client.start();
@@ -432,9 +655,50 @@ public class LeshanClientDemo {
 
         // Change the location through the Console
         try (Scanner scanner = new Scanner(System.in)) {
+            List<Character> wasdCommands = Arrays.asList('w', 'a', 's', 'd');
             while (scanner.hasNext()) {
-                String nextMove = scanner.next();
-                locationInstance.moveLocation(nextMove);
+                String command = scanner.next();
+                if (command.startsWith("create")) {
+                    try {
+                        int objectId = scanner.nextInt();
+                        if (client.getObjectTree().getObjectEnabler(objectId) != null) {
+                            LOG.info("Object {} already enabled.", objectId);
+                        }
+                        if (model.getObjectModel(objectId) == null) {
+                            LOG.info("Unable to enable Object {} : there no model for this.", objectId);
+                        } else {
+                            ObjectsInitializer objectsInitializer = new ObjectsInitializer(model);
+                            objectsInitializer.setDummyInstancesForObject(objectId);
+                            LwM2mObjectEnabler object = objectsInitializer.create(objectId);
+                            client.getObjectTree().addObjectEnabler(object);
+                        }
+                    } catch (Exception e) {
+                        // skip last token
+                        scanner.next();
+                        LOG.info("Invalid syntax, <objectid> must be an integer : create <objectId>");
+                    }
+                } else if (command.startsWith("delete")) {
+                    try {
+                        int objectId = scanner.nextInt();
+                        if (objectId == 0 || objectId == 0 || objectId == 3) {
+                            LOG.info("Object {} can not be disabled.", objectId);
+                        } else if (client.getObjectTree().getObjectEnabler(objectId) == null) {
+                            LOG.info("Object {} is not enabled.", objectId);
+                        } else {
+                            client.getObjectTree().removeObjectEnabler(objectId);
+                        }
+                    } catch (Exception e) {
+                        // skip last token
+                        scanner.next();
+                        LOG.info("\"Invalid syntax, <objectid> must be an integer : delete <objectId>");
+                    }
+                } else if (command.startsWith("update")) {
+                    client.triggerRegistrationUpdate();
+                } else if (command.length() == 1 && wasdCommands.contains(command.charAt(0))) {
+                    locationInstance.moveLocation(command);
+                } else {
+                    LOG.info("Unknown command '{}'", command);
+                }
             }
         }
     }

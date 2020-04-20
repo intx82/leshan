@@ -2,11 +2,11 @@
  * Copyright (c) 2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -28,8 +28,8 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.leshan.server.bootstrap.BootstrapConfig;
-import org.eclipse.leshan.server.bootstrap.demo.BootstrapStoreImpl;
-import org.eclipse.leshan.server.bootstrap.demo.ConfigurationChecker.ConfigurationException;
+import org.eclipse.leshan.server.bootstrap.EditableBootstrapConfigStore;
+import org.eclipse.leshan.server.bootstrap.InvalidConfigurationException;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -63,11 +63,11 @@ public class BootstrapServlet extends HttpServlet {
         }
     }
 
-    private final BootstrapStoreImpl bsStore;
+    private final EditableBootstrapConfigStore bsStore;
 
     private final Gson gson;
 
-    public BootstrapServlet(BootstrapStoreImpl bsStore) {
+    public BootstrapServlet(EditableBootstrapConfigStore bsStore) {
         this.bsStore = bsStore;
 
         this.gson = new GsonBuilder().registerTypeHierarchyAdapter(Byte.class, new SignedByteUnsignedByteAdapter())
@@ -83,7 +83,7 @@ public class BootstrapServlet extends HttpServlet {
 
         resp.setStatus(HttpServletResponse.SC_OK);
         resp.setContentType("application/json");
-        resp.getOutputStream().write(gson.toJson(bsStore.getBootstrapConfigs()).getBytes(StandardCharsets.UTF_8));
+        resp.getOutputStream().write(gson.toJson(bsStore.getAll()).getBytes(StandardCharsets.UTF_8));
     }
 
     @Override
@@ -111,10 +111,10 @@ public class BootstrapServlet extends HttpServlet {
             if (cfg == null) {
                 sendError(resp, HttpServletResponse.SC_BAD_REQUEST, "no content");
             } else {
-                bsStore.addConfig(endpoint, cfg);
+                bsStore.add(endpoint, cfg);
                 resp.setStatus(HttpServletResponse.SC_OK);
             }
-        } catch (JsonSyntaxException | ConfigurationException e) {
+        } catch (JsonSyntaxException | InvalidConfigurationException e) {
             sendError(resp, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
         }
     }
@@ -138,7 +138,7 @@ public class BootstrapServlet extends HttpServlet {
 
         String endpoint = path[0];
 
-        if (bsStore.deleteConfig(endpoint)) {
+        if (bsStore.remove(endpoint) != null) {
             resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
         } else {
             sendError(resp, HttpServletResponse.SC_NOT_FOUND, "no config for " + endpoint);

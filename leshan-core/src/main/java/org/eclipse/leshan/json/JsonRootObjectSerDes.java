@@ -2,11 +2,11 @@
  * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  * 
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    http://www.eclipse.org/legal/epl-v20.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
  * 
@@ -15,7 +15,8 @@
  *******************************************************************************/
 package org.eclipse.leshan.json;
 
-import org.eclipse.leshan.core.model.json.JsonSerDes;
+import org.eclipse.leshan.util.json.JsonException;
+import org.eclipse.leshan.util.json.JsonSerDes;
 
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
@@ -26,7 +27,7 @@ public class JsonRootObjectSerDes extends JsonSerDes<JsonRootObject> {
     private JsonArrayEntrySerDes serDes = new JsonArrayEntrySerDes();
 
     @Override
-    public JsonObject jSerialize(JsonRootObject jro) {
+    public JsonObject jSerialize(JsonRootObject jro) throws JsonException {
         JsonObject o = new JsonObject();
 
         if (jro.getBaseName() != null)
@@ -43,7 +44,7 @@ public class JsonRootObjectSerDes extends JsonSerDes<JsonRootObject> {
     };
 
     @Override
-    public JsonRootObject deserialize(JsonObject o) {
+    public JsonRootObject deserialize(JsonObject o) throws JsonException {
         if (o == null)
             return null;
 
@@ -52,6 +53,8 @@ public class JsonRootObjectSerDes extends JsonSerDes<JsonRootObject> {
         JsonValue e = o.get("e");
         if (e != null)
             jro.setResourceList(serDes.deserialize(e.asArray()));
+        else
+            throw new JsonException("'e' field is missing for %s", o.toString());
 
         JsonValue bn = o.get("bn");
         if (bn != null && bn.isString())
