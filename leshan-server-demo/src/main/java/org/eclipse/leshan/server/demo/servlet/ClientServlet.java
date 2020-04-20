@@ -1,18 +1,18 @@
-/*******************************************************************************
+/** *****************************************************************************
  * Copyright (c) 2013-2015 Sierra Wireless and others.
- * 
+ *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
- * 
+ *
  * The Eclipse Public License is available at
  *    http://www.eclipse.org/legal/epl-v10.html
  * and the Eclipse Distribution License is available at
  *    http://www.eclipse.org/org/documents/edl-v10.html.
- * 
+ *
  * Contributors:
  *     Sierra Wireless - initial API and implementation
- *******************************************************************************/
+ ****************************************************************************** */
 package org.eclipse.leshan.server.demo.servlet;
 
 import java.io.IOException;
@@ -32,6 +32,7 @@ import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.node.LwM2mObjectInstance;
 import org.eclipse.leshan.core.node.LwM2mSingleResource;
 import org.eclipse.leshan.core.node.codec.CodecException;
+import org.eclipse.leshan.core.attributes.AttributeSet;
 import org.eclipse.leshan.core.request.ContentFormat;
 import org.eclipse.leshan.core.request.CreateRequest;
 import org.eclipse.leshan.core.request.DeleteRequest;
@@ -41,6 +42,7 @@ import org.eclipse.leshan.core.request.ObserveRequest;
 import org.eclipse.leshan.core.request.ReadRequest;
 import org.eclipse.leshan.core.request.WriteRequest;
 import org.eclipse.leshan.core.request.WriteRequest.Mode;
+import org.eclipse.leshan.core.request.WriteAttributesRequest;
 import org.eclipse.leshan.core.request.exception.ClientSleepingException;
 import org.eclipse.leshan.core.request.exception.InvalidRequestException;
 import org.eclipse.leshan.core.request.exception.InvalidResponseException;
@@ -54,6 +56,7 @@ import org.eclipse.leshan.core.response.LwM2mResponse;
 import org.eclipse.leshan.core.response.ObserveResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
+import org.eclipse.leshan.core.response.WriteAttributesResponse;
 import org.eclipse.leshan.server.LwM2mServer;
 import org.eclipse.leshan.server.demo.servlet.json.LwM2mNodeDeserializer;
 import org.eclipse.leshan.server.demo.servlet.json.LwM2mNodeSerializer;
@@ -111,7 +114,7 @@ public class ClientServlet extends HttpServlet {
                 registrations.add(iterator.next());
             }
 
-            String json = this.gson.toJson(registrations.toArray(new Registration[] {}));
+            String json = this.gson.toJson(registrations.toArray(new Registration[]{}));
             resp.setContentType("application/json");
             resp.getOutputStream().write(json.getBytes(StandardCharsets.UTF_8));
             resp.setStatus(HttpServletResponse.SC_OK);
@@ -230,17 +233,26 @@ public class ClientServlet extends HttpServlet {
             String target = StringUtils.removeStart(req.getPathInfo(), "/" + clientEndpoint);
             Registration registration = server.getRegistrationService().getByEndpoint(clientEndpoint);
             if (registration != null) {
-                // get content format
-                String contentFormatParam = req.getParameter(FORMAT_PARAM);
-                ContentFormat contentFormat = contentFormatParam != null
-                        ? ContentFormat.fromName(contentFormatParam.toUpperCase())
-                        : null;
+                if (path.length >= 3 && "attributes".equals(path[path.length - 1])) {
+                    // create & process request WriteAttributes request
+                    target = StringUtils.removeEnd(target, path[path.length - 1]);
+                    AttributeSet attributes = AttributeSet.parse(req.getQueryString());
+                    WriteAttributesRequest request = new WriteAttributesRequest(target, attributes);
+                    WriteAttributesResponse cResponse = server.send(registration, request, TIMEOUT);
+                    processDeviceResponse(req, resp, cResponse);
+                } else {
+                    // get content format
+                    String contentFormatParam = req.getParameter(FORMAT_PARAM);
+                    ContentFormat contentFormat = contentFormatParam != null
+                            ? ContentFormat.fromName(contentFormatParam.toUpperCase())
+                            : null;
 
-                // create & process request
-                LwM2mNode node = extractLwM2mNode(target, req);
-                WriteRequest request = new WriteRequest(Mode.REPLACE, contentFormat, target, node);
-                WriteResponse cResponse = server.send(registration, request, TIMEOUT);
-                processDeviceResponse(req, resp, cResponse);
+                    // create & process request
+                    LwM2mNode node = extractLwM2mNode(target, req);
+                    WriteRequest request = new WriteRequest(Mode.REPLACE, contentFormat, target, node);
+                    WriteResponse cResponse = server.send(registration, request, TIMEOUT);
+                    processDeviceResponse(req, resp, cResponse);
+                }
             } else {
                 resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 resp.getWriter().format("No registered client with id '%s'", clientEndpoint).flush();
