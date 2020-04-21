@@ -158,6 +158,11 @@ public class LwM2mNodeTlvDecoder {
                 }
                 return (T) parseResourceTlv(tlv, path, model);
             } else {
+                // if (tlvs.length == 1 && tlvs[0].getType() == TlvType.RESOURCE_INSTANCE && path.isResourceInstance()) 
+                // {
+                //     Tlv tlv = tlvs[0];
+                //     return (T) parseResourceTlv(tlv, path, model);
+                // }
                 Type expectedRscType = getResourceType(path, model);
                 return (T) LwM2mMultipleResource.newResource(path.getResourceId(),
                         parseTlvValues(tlvs, expectedRscType, path), expectedRscType);

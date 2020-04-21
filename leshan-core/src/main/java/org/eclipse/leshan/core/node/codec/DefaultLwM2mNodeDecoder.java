@@ -157,6 +157,8 @@ public class DefaultLwM2mNodeDecoder implements LwM2mNodeDecoder {
             return LwM2mObjectInstance.class;
         } else if (path.isResource()) {
             return LwM2mResource.class;
+        } else if (path.isResourceInstance()) {
+            return LwM2mResource.class;
         }
         throw new IllegalArgumentException("invalid path level: " + path);
     }
