@@ -18,7 +18,9 @@
  *******************************************************************************/
 package org.eclipse.leshan.server.demo.utils;
 
+import java.util.Base64;
 import java.util.Date;
+import java.util.regex.Pattern;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
@@ -138,14 +140,23 @@ public class MagicLwM2mValueConverter implements LwM2mValueConverter {
             break;
         case OPAQUE:
             if (currentType == Type.STRING) {
-                // let's assume we received an hexadecimal string
-                LOG.debug("Trying to convert hexadecimal string {} to byte array", value);
-                // TODO check if we shouldn't instead assume that the string contains Base64 encoded data
-                try {
-                    return Hex.decodeHex(((String) value).toCharArray());
-                } catch (IllegalArgumentException e) {
-                    throw new CodecException("Unable to convert hexastring [%s] to byte array for resource %s", value,
-                            resourcePath);
+                String val = (String)value;
+                // Check for BASE64
+                if (Pattern.compile("[^a-z0-9 ]", Pattern.CASE_INSENSITIVE).matcher(val).find()) {
+                    LOG.debug("Trying to convert base64 string to byte array");
+                    try {
+                        return Base64.getDecoder().decode(val);
+                    } catch (Exception e) {
+                        throw new CodecException("Unable to convert base64 string to byte array for resource %s", resourcePath);
+                    }
+                } else {
+                // Try with HEX encoding
+                    LOG.debug("Trying to convert base64 string to byte array");
+                    try {
+                        return Hex.decodeHex(val.toCharArray());
+                    } catch (IllegalArgumentException e) {
+                        throw new CodecException("Unable to convert hexastring to byte array for resource %s", resourcePath);
+                    }
                 }
             }
             break;
